@@ -177,7 +177,7 @@ class Sports_DB_Packer:
         self.odds_df['home_serial'] = self.odds_df['Home_Team'].apply(self.get_team_serial)
         self.odds_df['away_serial'] = self.odds_df['Away_Team'].apply(self.get_team_serial)
         self.odds_df = self.odds_df[['Home_Team','home_serial','Away_Team', 'away_serial','MARKET_SERIAL', 'SPREAD_HOME', 
-                      'TOTAL', 'H2H_HOME', 'H2H_AWAY']]
+                      'TOTAL', 'H2H_HOME', 'H2H_AWAY','Date']]
         
         self.odds_called = True
 
@@ -205,9 +205,12 @@ class Sports_DB_Packer:
 
         # Check the games from the odds API and compare to what is currently in the db by date
         # Eliminate duplicate games by only grabbing games from one market
-        unmade_games = odds_df_copy[(odds_df_copy['Date'] > most_recent_game) &
+        try:
+            unmade_games = odds_df_copy[(odds_df_copy['Date'] > most_recent_game) &
                                     odds_df_copy['MARKET_SERIAL'] == market_id]
-        
+        except KeyError as e:
+            raise KeyError(f"""Looks like when you called the odds api the columns in the df did not populate
+                           correctly. See specific error: {e}. See self.get_odds_df for more.""")
         # Add the league serial so it can be added to the games table
         unmade_games['league_serial'] = self.league_serial
 
@@ -344,7 +347,9 @@ class Sports_DB_Packer:
                         FROM 
                             GAMES AS G JOIN GAME_MARKET_ODDS AS GMO ON G.SERIAL = GMO.GAME_SERIAL
                         WHERE 
-                            G.GAME_DATE = (SELECT MAX(GAME_DATE) FROM GAMES)
+                            G.GAME_DATE = (SELECT MAX(G.GAME_DATE) FROM 
+                                            GAMES AS G JOIN GAME_MARKET_ODDS AS GMO 
+                                            ON G.SERIAL = GMO.GAME_SERIAL)
                         """, fetchstyle='one')[0][0]
         
         # Filter market odds by the game date
@@ -356,9 +361,21 @@ class Sports_DB_Packer:
         
         # Drop game date so df can go in market odds table
         odds_to_add = odds_to_add.drop('Date', axis=1)
+
+        if debug:
+            print(odds_to_add)
         
         self.df_to_db('GAME_MARKET_ODDS', odds_to_add, debug=debug)
     
+    def full_odds_run(self):
+        # Run the full odds api process and insert the records.
+        self.get_odds_df()
+        self.populate_future_game_data()
+        self._combine_odds_api_and_games_dfs()
+        self.refresh_market_odds_table()
+        self.pack_odds_table()
+
+
     # move to dbmanager later *****
     def df_to_db(self, table_name: str, df: pd.DataFrame, debug: bool = False):
         f"""
