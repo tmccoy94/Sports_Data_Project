@@ -447,8 +447,6 @@ class NFL_Data_Packer(Sports_DB_Packer):
         return {team_name: url_name for team_name, url_name in zip(self.teams_df['TEAM_NAME'], 
                                                                    self.teams_df['TR_URL_NAME'])}
     
-    
-    
     def _build_opponent_map(self) -> dict[str, str]:
         """Returns a dict used to map the names of opponents on team schedule to names that will
         match what the names are in the Sports DB."""
@@ -507,6 +505,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         self.df_to_db('TEAM_TR_FOOTBALL_OPPG', oppg, debug=debug)
 
     # This section is for team games data calling and packing
+
     def build_scrapers(self) -> list[Team_Games_Scraper]:
         """Create scrapers for each team in the chosen league"""
         scrapers = []
@@ -585,12 +584,34 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
         self.all_games_data = games_data_by_team
 
-    def pack_games_data(self) -> None:
-
+    def pack_games_data(self, acknowdedged: bool = False) -> None:
+        """This function is setup to pack all the games data into the GAMES table in the db.
+        This should only have to be run to catch up if the scripts haven't run in a while.
+        
+        The odds api provides future games that get packed in, so running this function should
+        be rare. As a result you have to acknowledge its usage."""
         if not self.all_games_data:
             raise ValueError("All games data is not populated, run self.get_all_games_data().")
+        if not acknowdedged:
+            raise ValueError("""This function is setup to pack all the games data into the GAMES table in the db.
+        This should only have to be run to catch up if the scripts haven't run in a while.
         
+        The odds api provides future games that get packed in to the db, so running this function should
+        be rare. As a result you have to acknowledge its usage.
+                             
+        Rerun with acknowledged as True to run the function.""")
         games_table_data = copy.deepcopy(self.all_games_data)
+
+        most_recent_game_date = self.manager.fetch_records("""
+                                SELECT
+                                    GAME_DATE
+                                FROM
+                                    GAMES
+                                ORDER BY 
+                                    GAME_DATE DESC
+                                LIMIT 1""",fetchstyle="one")[0][0] # unpack
+        
+        games_table_data = games_table_data[games_table_data['Date'] >= most_recent_game_date]
 
         for team, df in games_table_data.items():
             df = df[['home_serial', 'away_serial', 'Date', 'League Serial']]
@@ -633,6 +654,17 @@ class NFL_Data_Packer(Sports_DB_Packer):
             self.df_to_db('GAME_OUTCOMES', joined_df)
 
     def pack_all_games_data(self) -> None:
+        """Combining all funcs needed to get all the prior games and game outcomes for the
+        entire season. This shouldn't be called every time."""
         self.get_all_games_data()
         self.pack_games_data()
         self.pack_game_outcomes_data()
+
+    def pack_gam_outcomes_data(self) -> None:
+        self.get_all_games_data()
+        self.pack_game_outcomes_data()
+
+    # Put it all together
+
+    def full_pack(self, pack_all_games_data: bool = False, help: bool = False):
+        
