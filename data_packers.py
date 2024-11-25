@@ -619,7 +619,8 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
         self.game_data_packed = True
 
-    def pack_game_outcomes_data(self) -> None:
+    def pack_game_outcomes_data(self, debug: bool= False) -> None:
+        
 
         if not self.game_data_packed:
             raise ValueError("Game data not yet packed, run self.pack_games_data().")
@@ -651,7 +652,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
             )
             # Drop unecessary data and insert into game outcomes table
             joined_df = joined_df[['SERIAL', 'winner_serial', 'Points', 'Opp Points']]
-            self.df_to_db('GAME_OUTCOMES', joined_df)
+            self.df_to_db('GAME_OUTCOMES', joined_df, debug=debug)
 
     def pack_all_games_data(self) -> None:
         """Combining all funcs needed to get all the prior games and game outcomes for the
@@ -660,11 +661,45 @@ class NFL_Data_Packer(Sports_DB_Packer):
         self.pack_games_data()
         self.pack_game_outcomes_data()
 
-    def pack_gam_outcomes_data(self) -> None:
+    def pack_game_outcomes_data_only(self) -> None:
         self.get_all_games_data()
         self.pack_game_outcomes_data()
 
     # Put it all together
 
-    def full_pack(self, pack_all_games_data: bool = False, help: bool = False):
+    def is_new_week(self) -> None:
+        """Use datetime to check if the db_last_updated date is in the past week."""
+        pass
+
+    def full_pack(self, pack_all_games_data: bool = False) -> None:
+        f"""This func is designed to run a standard data gathering for the {self.league}.
         
+        A standard run will fill future game data and grab odds for any games from the odds
+        api which have not already been populated and check to see if any of the odds have
+        changed.
+        
+        It will also updated OPPG and PPG stats for all the teams.
+        
+        Weekly, it will grab all the games for all the teams and update the outcomes table.
+        
+        Args:
+            pack_all_games_data (bool): If true, this will get all the 
+            game data for the season and put it."""
+        
+        # get PPG OPPG stats
+        self.pack_ppg_oppg()
+
+        # Get odds data
+        self.full_odds_run()
+
+        # Pack all the games data if option is selected - NOT standard run.
+        if pack_all_games_data:
+            self.pack_all_games_data()
+            return None
+
+        # Check if it's a new week yet and get game outcomes data if so.
+        if self.is_new_week():
+            self.pack_game_outcomes_data_only()
+
+        return "Packed all data." # Need to write a logger so we get more than this lol
+
