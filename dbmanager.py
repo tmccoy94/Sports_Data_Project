@@ -63,7 +63,7 @@ class SqliteDBManager:
         return cols
 
 
-    def _read_query(self, query: str, params: tuple = None, ) -> None:
+    def read_query(self, query: str, params: tuple = None, ) -> None:
         """
         Execute a database query with error handling.
 
@@ -87,7 +87,7 @@ class SqliteDBManager:
         finally:
             self.close()
 
-    def _execute_query(self, query: str, params: tuple = None, commit: bool = False) -> None:
+    def execute_query(self, query: str, params: tuple = None, commit: bool = False) -> None:
         """
         Execute a database query with error handling.
 
@@ -220,8 +220,8 @@ class SqliteDBManager:
                 constraint = col[2].upper()
                 if constraint == "PRIMARY KEY":
                     col_def += " PRIMARY KEY"
-                elif "FOREIGN KEY" in constraint:
-                    col_def = f"{constraint}"  # Use the full foreign key constraint as is
+                elif "REFERENCES" in constraint:
+                    col_def += f" {constraint}"  # Use the full foreign key constraint as is
             column_defs.append(col_def)
 
         create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(column_defs)})"
@@ -231,7 +231,7 @@ class SqliteDBManager:
             return ("Run without debug to commit")
 
         # Execute the create table query
-        self._execute_query(create_table_query, commit=True)
+        self.execute_query(create_table_query, commit=True)
         print(f"Table '{table_name}' created successfully.")
 
     def insert_table_records(self, table_name: str, records: list[tuple] = [], debug: bool = False) -> None:
@@ -335,7 +335,7 @@ class SqliteDBManager:
 
       # Execute and commit
       
-      self._execute_query(query,values,commit=True)
+      self.execute_query(query,values,commit=True)
       print("Records updated successfully.")
 
     def delete_table_records(self, table_name: str, conditions: dict, debug: bool = False) -> None:
@@ -376,7 +376,7 @@ class SqliteDBManager:
           return "Run without debug to commit the changes."
 
       # Execute and commit
-      self._execute_query(delete_query,query_params,commit=True)
+      self.execute_query(delete_query,query_params,commit=True)
       print("Records deleted successfully.")
 
     def truncate_table(self, table_name: str, debug: bool = False) -> None:
@@ -406,7 +406,7 @@ class SqliteDBManager:
           return "Run without debug to commit the changes."
 
       # Execute and commit
-      self._execute_query(truncate_query, commit=True)
+      self.execute_query(truncate_query, commit=True)
       print(f"Table '{table_name}' truncated successfully.")
 
     def copy_table(self, new_table_name: str, old_table_name: str, debug: bool = False) -> None:
@@ -452,7 +452,7 @@ class SqliteDBManager:
           return "Run without debug to commit the changes."
 
       # Execute and commit
-      self._execute_query(copy_query, commit=True)
+      self.execute_query(copy_query, commit=True)
       print(f"Table '{old_table_name}' copied into '{new_table_name}' successfully.")
 
     def drop_table(self, table_name: str, debug: bool = False) -> None:
@@ -482,7 +482,7 @@ class SqliteDBManager:
           return "Run without debug to commit the changes."
 
       # Execute and commit
-      self._execute_query(drop_query, commit=True)
+      self.execute_query(drop_query, commit=True)
       print(f"Table '{table_name}' deleted successfully.")
 
     def alter_table(self, table_name: str, operation: str, column_name: str = None, new_name: str = None, 
@@ -545,6 +545,6 @@ class SqliteDBManager:
           return "Run without debug to commit the changes."
 
       # Execute and commit
-      self._execute_query(alter_query, commit=True)
+      self.execute_query(alter_query, commit=True)
       print(f"Table '{table_name}' altered successfully with operation '{operation}'.")
 

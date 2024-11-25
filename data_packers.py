@@ -3,7 +3,7 @@ import pandas as pd
 from restricted import odds_api_key
 from dbmanager import SqliteDBManager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from typing import Any
 import time, copy
@@ -47,7 +47,8 @@ class Sports_DB_Packer:
 
     def _query_last_db_updated_date(self) -> str:
         """Get date the sports db was last updated"""
-        date = self.manager.fetch_records("SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATED",fetchstyle='one')
+        date = self.manager.fetch_records(f"""SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATE_RECORDS
+                                          WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')
         return date[0][0]
 
         
@@ -86,7 +87,7 @@ class Sports_DB_Packer:
         """Insert a new updated date into the db after updates are done"""
         now =  datetime.now().strftime(self.db_date_format)
 
-        self.manager.insert_table_records("DB_UPDATED", [(now,)])
+        self.manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
     
     def call_odds_api(self) -> dict:
         """
@@ -620,7 +621,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         self.game_data_packed = True
 
     def pack_game_outcomes_data(self, debug: bool= False) -> None:
-        
+
 
         if not self.game_data_packed:
             raise ValueError("Game data not yet packed, run self.pack_games_data().")
@@ -667,8 +668,35 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
     # Put it all together
 
-    def is_new_week(self) -> None:
-        """Use datetime to check if the db_last_updated date is in the past week."""
+    def is_new_week(self) -> bool:
+        """Use datetime to check if the db_last_updated date is in the past week.
+        
+        Returns:
+            bool: True if the most recent Sunday has passed since the last_updated_date, 
+                indicating a new calendar week. False otherwise.
+        """
+
+        last_updated_date = self.db_last_updated_date
+        date_format = self.db_date_format
+
+        # Parse the last updated date
+        try:
+            last_updated = datetime.strptime(last_updated_date, date_format)
+        except ValueError as e:
+            raise ValueError(f"Invalid date format for last_updated_date: {last_updated_date}. Expected format: {date_format}") from e
+
+        # Calculate today's date
+        today = datetime.now()
+
+        # Find the most recent Sunday (relative to today)
+        # If today is Sunday, it will return today's date; otherwise, the last Sunday.
+        days_since_sunday = today.weekday() + 1  # weekday() returns 0 for Monday, so add 1
+        most_recent_sunday = today - timedelta(days=days_since_sunday)
+
+        # Check if the most recent Sunday has passed since the last updated date
+        # AND the last updated date is before the most recent Sunday
+        return (last_updated < most_recent_sunday)
+
         pass
 
     def full_pack(self, pack_all_games_data: bool = False) -> None:
@@ -700,6 +728,8 @@ class NFL_Data_Packer(Sports_DB_Packer):
         # Check if it's a new week yet and get game outcomes data if so.
         if self.is_new_week():
             self.pack_game_outcomes_data_only()
+
+        self.insert_new_db_updated_date() # Insert new updated record into the db
 
         return "Packed all data." # Need to write a logger so we get more than this lol
 
