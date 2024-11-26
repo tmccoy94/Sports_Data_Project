@@ -32,6 +32,8 @@ class Sports_DB_Packer:
         self.odds_date_format: str = 'iso'
         self.db_date_format: str = r"%Y-%m-%d %H:%M:%S" # for use in formatting dates on way to db
         self.sport: str = None # defined in sublcasses
+        self.db_last_updated_date: str = None # defined in sublcasses
+        self.most_recent_game_date: str = None # defined in sublcasses 
         self.league_serial: int = None # defined in sublcasses
         self.requests_used: int = None # Requests for odds API
         self.requests_remaining: int = None # Requests for odds API
@@ -41,16 +43,20 @@ class Sports_DB_Packer:
         self.future_games_checked: bool = False # check if future games have been accounted for yet
         self.manager: SqliteDBManager = SqliteDBManager('SportsData.db')
         self.tables: list[str] = self.manager.check_table_names_in_db()
-        self.db_last_updated_date: str = self._query_last_db_updated_date()        
+         
         self.teams_df : pd.DataFrame = self._query_teams_table()        
         self.team_serial_ref_dict: dict[str, str] = self._build_team_serial_ref()
 
     def _query_last_db_updated_date(self) -> str:
         """Get date the sports db was last updated"""
-        date = self.manager.fetch_records(f"""SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATE_RECORDS
-                                          WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')
-        return date[0][0]
-
+        db_last_updated_date = self.manager.fetch_records(f"""SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATE_RECORDS
+                                          WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')[0][0]
+        return db_last_updated_date
+    
+    def _query_most_recent_game_date(self) -> str:
+        most_recent_game_date = self.manager.fetch_records(f"""SELECT MAX(GAME_DATE) FROM GAMES
+                                               WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')[0][0]
+        return most_recent_game_date
         
     def _get_sport(self, league: str) -> str:
         """
@@ -197,7 +203,7 @@ class Sports_DB_Packer:
         if self.odds_df.empty:
             raise AttributeError("You haven't yet called the odds api info to compare this with.")
         
-        most_recent_game: str = self.manager.fetch_records("SELECT MAX(GAME_DATE) FROM GAMES",fetchstyle='one')[0][0]
+        
 
         odds_df_copy: pd.DataFrame = copy.deepcopy(self.odds_df)
 
@@ -207,7 +213,7 @@ class Sports_DB_Packer:
         # Check the games from the odds API and compare to what is currently in the db by date
         # Eliminate duplicate games by only grabbing games from one market
         try:
-            unmade_games = odds_df_copy[(odds_df_copy['Date'] > most_recent_game) &
+            unmade_games = odds_df_copy[(odds_df_copy['Date'] > self.most_recent_game_date) &
                                     odds_df_copy['MARKET_SERIAL'] == market_id]
         except KeyError as e:
             raise KeyError(f"""Looks like when you called the odds api the columns in the df did not populate
@@ -426,9 +432,11 @@ class NFL_Data_Packer(Sports_DB_Packer):
         self.team_tr_table_key: dict[str, str] = self._build_team_tr_table_key() 
         self.url_ref_dict: dict[str, str] = self._build_tr_url_ref_dict()
         self.opponent_map = self._build_opponent_map()
+        self.db_last_updated_date: str = self._query_last_db_updated_date()
+        self.most_recent_game_date: str = self._query_most_recent_game_date() 
         self.odds_df: pd.DataFrame = None
         self.all_games_data: dict[str,pd.DataFrame] = None
-        self.game_data_packed: bool = False
+        self.games_data_retrieved: bool = False
 
     
 
@@ -563,13 +571,21 @@ class NFL_Data_Packer(Sports_DB_Packer):
             nfl_team_data = pd.read_html(f"https://www.teamrankings.com/nfl/team/{scraper.tr_url_name}/")
             games_data = nfl_team_data[1].dropna() # Only games which have been played
 
+
+            # Get most recent game with outcome data
+            most_recent_game_w_outcome = self.manager.fetch_records("""
+                    SELECT MAX(G.GAME_DATE)
+                    FROM GAMES AS G JOIN GAME_OUTCOMES AS GO ON G.SERIAL = GO.GAME_SERIAL                      
+                    """, fetchstyle='one')[0][0]
             # Process data
             games_data = games_data[games_data['Location'] == 'Home']
             games_data = self.format_team_game_history(games_data)
-            games_data = games_data[games_data['Date'] >= self.db_last_updated_date]
+            games_data = games_data[games_data['Date'] >= most_recent_game_w_outcome]
 
             # Check if DataFrame is empty
             if games_data.empty:
+                print(f"{scraper.team_name} has no game updates since {most_recent_game_w_outcome}")
+                #time.sleep(10)
                 continue  # Skip this team if no data matches the criteria
 
             # Add metadata
@@ -579,11 +595,12 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
             # Assign processed data to the dictionary
             games_data_by_team[scraper.team_name] = games_data
-
+            print(f"{scraper.team_name} added {len(games_data)} games since {most_recent_game_w_outcome}.")
             # Respect crawl delay
-            time.sleep(10)
+            #time.sleep(10)
 
         self.all_games_data = games_data_by_team
+        self.games_data_retrieved = True
 
     def pack_games_data(self, acknowdedged: bool = False) -> None:
         """This function is setup to pack all the games data into the GAMES table in the db.
@@ -591,40 +608,37 @@ class NFL_Data_Packer(Sports_DB_Packer):
         
         The odds api provides future games that get packed in, so running this function should
         be rare. As a result you have to acknowledge its usage."""
-        if not self.all_games_data:
-            raise ValueError("All games data is not populated, run self.get_all_games_data().")
+        if not self.games_data_retrieved:
+            try:
+                self.get_all_games_data()
+            except Exception:
+                raise ValueError("Game data not yet packed, run self.pack_games_data().")
         if not acknowdedged:
             raise ValueError("""This function is setup to pack all the games data into the GAMES table in the db.
-        This should only have to be run to catch up if the scripts haven't run in a while.
-        
-        The odds api provides future games that get packed in to the db, so running this function should
-        be rare. As a result you have to acknowledge its usage.
-                             
-        Rerun with acknowledged as True to run the function.""")
+                                This should only have to be run to catch up if the scripts haven't run in a while.
+                                
+                                The odds api provides future games that get packed in to the db, so running this function should
+                                be rare. As a result you have to acknowledge its usage.
+                                                    
+                                Rerun with acknowledged as True to run the function.""")
+
         games_table_data = copy.deepcopy(self.all_games_data)
 
-        most_recent_game_date = self.manager.fetch_records("""
-                                SELECT
-                                    GAME_DATE
-                                FROM
-                                    GAMES
-                                ORDER BY 
-                                    GAME_DATE DESC
-                                LIMIT 1""",fetchstyle="one")[0][0] # unpack
-        
-        games_table_data = games_table_data[games_table_data['Date'] >= most_recent_game_date]
+        games_table_data = games_table_data[games_table_data['Date'] >= self.most_recent_game_date]
 
         for team, df in games_table_data.items():
             df = df[['home_serial', 'away_serial', 'Date', 'League Serial']]
             self.df_to_db('GAMES', df)
 
-        self.game_data_packed = True
-
     def pack_game_outcomes_data(self, debug: bool= False) -> None:
 
-
-        if not self.game_data_packed:
-            raise ValueError("Game data not yet packed, run self.pack_games_data().")
+        if not self.games_data_retrieved:
+            try:
+                self.get_all_games_data()
+            except Exception as e:
+                raise ValueError(f"""Game data not yet retrieved, run self.get_all_games_data(). 
+                                 The program did try to run that func, here's what we got: 
+                                 {e}""")
         # Create a copy of the retrieved all games data dict
         game_outcomes_table_data = copy.deepcopy(self.all_games_data)
 
@@ -657,15 +671,9 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
     def pack_all_games_data(self) -> None:
         """Combining all funcs needed to get all the prior games and game outcomes for the
-        entire season. This shouldn't be called every time."""
-        self.get_all_games_data()
+        entire season. This shouldn't be called every time."""        
         self.pack_games_data()
         self.pack_game_outcomes_data()
-
-    def pack_game_outcomes_data_only(self) -> None:
-        self.get_all_games_data()
-        self.pack_game_outcomes_data()
-
     # Put it all together
 
     def is_new_week(self) -> bool:
@@ -699,7 +707,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
         pass
 
-    def full_pack(self, pack_all_games_data: bool = False) -> None:
+    def full_pack(self, pack_all_games_data: bool = False, acknowledged: bool = False) -> None:
         f"""This func is designed to run a standard data gathering for the {self.league}.
         
         A standard run will fill future game data and grab odds for any games from the odds
@@ -721,13 +729,14 @@ class NFL_Data_Packer(Sports_DB_Packer):
         self.full_odds_run()
 
         # Pack all the games data if option is selected - NOT standard run.
+        # Use in case of a fresh db.
         if pack_all_games_data:
-            self.pack_all_games_data()
+            self.pack_all_games_data(acknowledged=acknowledged)
             return None
 
         # Check if it's a new week yet and get game outcomes data if so.
         if self.is_new_week():
-            self.pack_game_outcomes_data_only()
+            self.pack_game_outcomes_data()
 
         self.insert_new_db_updated_date() # Insert new updated record into the db
 
