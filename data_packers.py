@@ -213,8 +213,11 @@ class Sports_DB_Packer:
         # Check the games from the odds API and compare to what is currently in the db by date
         # Eliminate duplicate games by only grabbing games from one market
         try:
-            unmade_games = odds_df_copy[(odds_df_copy['Date'] > self.most_recent_game_date) &
+            if self.most_recent_game_date:
+                unmade_games = odds_df_copy[(odds_df_copy['Date'] > self.most_recent_game_date) &
                                     odds_df_copy['MARKET_SERIAL'] == market_id]
+            else:
+                unmade_games = odds_df_copy[odds_df_copy['MARKET_SERIAL'] == market_id]
         except KeyError as e:
             raise KeyError(f"""Looks like when you called the odds api the columns in the df did not populate
                            correctly. See specific error: {e}. See self.get_odds_df for more.""")
@@ -229,6 +232,58 @@ class Sports_DB_Packer:
         if not debug:
             self.future_games_checked = True
 
+    def get_uid(self, df: pd.DataFrame, home_serial_col_name:str, away_serial_col_name:str, 
+                date_col_name: str, debug: bool = False) -> pd.DataFrame:
+        """Takes in a df along with the col names needed in order to form a new df that
+        only uses the day of the date (formatted %Y:%m:%d %H:%M:%S) to create a join between the dfs instead of
+        the full date time that is stored in this database.
+
+        It will combine the home team serial, away team serial, and day of the game into one string creating
+        a unique id for each game.
+        
+        It will add a day & time column along with the original date column, it won't eliminate
+        the date column.
+        
+        Args:
+          df (pd.DataFrame): original dataframe
+          home_serial_col_name (str): The name of the column with the home serial
+          away_serial_col_name (str): The name of the column with the away serial
+          date_col_name (str): The name of the column with the date (formatted %Y:%m:%d %H:%M:%S)
+          debug (bool): A boolean you can set to true to help debug the function
+          
+        Returns:
+          df (pd.DataFrame): Same df you put in PLUS three cols: day, time, and UID."""
+        
+        if df.empty:
+            raise ValueError ("Provided df is empty. Need values for this work")
+        # Validate date column format
+        try:
+            if not debug:
+                df[date_col_name] = pd.to_datetime(df[date_col_name], format='%Y-%m-%d %H:%M:%S')
+            else:
+                copied_df = copy.deepcopy(df)
+                copied_df[date_col_name] = pd.to_datetime(copied_df[date_col_name], format='%Y-%m-%d %H:%M:%S')
+                copied_df['day'] = copied_df[date_col_name].dt.date.astype(str)  # Extracts the day (YYYY-MM-DD)
+                print(f"Day format of col: {copied_df['day'].values[0]}")
+                copied_df['time'] = copied_df[date_col_name].dt.time.astype(str)  # Extracts the time (HH:MM:SS)
+                print(f"Time format of col: {copied_df['time'].values[0]}")
+                return "Run again without debug to create the df with the day, time, UID cols."
+        except ValueError as e:
+            raise ValueError(f"Date column '{date_col_name}' contains invalid formats. Expected format is '%Y-%m-%d %H:%M:%S'. Error: {e}")           
+        
+        # Extract day and time
+        df['day'] = df[date_col_name].dt.date.astype(str)  # Extracts the day (YYYY-MM-DD)
+        df['time'] = df[date_col_name].dt.time.astype(str)  # Extracts the time (HH:MM:SS)
+
+              
+        df['UID'] = df['UID'] = (
+                df[home_serial_col_name].astype(str) + ' ' +
+                df[away_serial_col_name].astype(str) + ' ' +
+                df['day'].astype(str)
+            )
+        
+        return df
+
     def _combine_odds_api_and_games_dfs(self) -> pd.DataFrame:
         """Check that the correct columns are grabbed and combine the games table and odds df
         info so that they are ready to go into the market odds table."""
@@ -240,23 +295,15 @@ class Sports_DB_Packer:
                 raise AttributeError(f"Odds api df not yet created. Use self.get_odds_df to fill. Error: {e}")
             
         else:
-            changed_odds_check: pd.DataFrame = copy.deepcopy(self.odds_df)
+            copied_odds_df: pd.DataFrame = copy.deepcopy(self.odds_df)
 
-            changed_odds_check['UID'] = changed_odds_check['UID'] = (
-                changed_odds_check['home_serial'].astype(str) + ' ' +
-                changed_odds_check['away_serial'].astype(str) + ' ' +
-                changed_odds_check['Date'].astype(str)
-            )
-
+            copied_odds_df = self.get_uid(copied_odds_df, 'home_serial', 'away_serial', 'Date') 
+            
             games_df = self.manager.dataframe_query('select * from GAMES')
-            games_df['UID'] = games_df['UID'] = (
-                games_df['HOME_TEAM_SERIAL'].astype(str) + ' ' +
-                games_df['AWAY_TEAM_SERIAL'].astype(str) + ' ' +
-                games_df['GAME_DATE'].astype(str)
-            )
-
+            games_df = self.get_uid(games_df,'HOME_TEAM_SERIAL','AWAY_TEAM_SERIAL','GAME_DATE')
+                
             # Join the team df to the current db games data using the UID 
-            joined_df = pd.merge(changed_odds_check,games_df, on='UID', how='inner')
+            joined_df = pd.merge(copied_odds_df,games_df, on='UID', how='inner')
             joined_df = joined_df.drop_duplicates(subset=['UID','MARKET_SERIAL'])
             joined_df = joined_df[['SERIAL','MARKET_SERIAL','SPREAD_HOME','TOTAL','H2H_HOME','H2H_AWAY', 'Date']]
 
@@ -269,7 +316,7 @@ class Sports_DB_Packer:
         elif self.combined_market_odds_df.empty:
             raise ValueError("Your combined odds df has no values")
         else:
-            most_recent_record: str = self.manager.fetch_records("SELECT MAX(UPDATED_DATE) FROM GAME_MARKET_ODDS",fetchstyle='one')[0][0]
+            
              # Retrieve game serials to query for
             game_serials: pd.Series[int] = self.combined_market_odds_df['SERIAL'].unique()   
             existing_game_data = self.manager.dataframe_query(f"""SELECT * FROM GAME_MARKET_ODDS 
@@ -348,7 +395,7 @@ class Sports_DB_Packer:
         add the data to the game_market_odds table."""
         
         # Get the most recent game date from DB
-        most_recent_game_date_has_odds = self.manager.fetch_records("""
+        most_recent_game_date_has_odds: list[tuple] = self.manager.fetch_records("""
                         SELECT 
                             G.GAME_DATE AS GAME_DATE
                         FROM 
@@ -357,11 +404,13 @@ class Sports_DB_Packer:
                             G.GAME_DATE = (SELECT MAX(G.GAME_DATE) FROM 
                                             GAMES AS G JOIN GAME_MARKET_ODDS AS GMO 
                                             ON G.SERIAL = GMO.GAME_SERIAL)
-                        """, fetchstyle='one')[0][0]
+                        """, fetchstyle='one')
         
-        # Filter market odds by the game date
-        odds_to_add: pd.DataFrame = self.combined_market_odds_df[(self.combined_market_odds_df['Date'] > 
-                                                                  most_recent_game_date_has_odds)]
+        if most_recent_game_date_has_odds:
+            most_recent_game_date_has_odds = most_recent_game_date_has_odds[0][0]# unpack val from list of tuples    
+            # Filter market odds by the game date
+            odds_to_add: pd.DataFrame = self.combined_market_odds_df[(self.combined_market_odds_df['Date'] > 
+                                                                    most_recent_game_date_has_odds)]
 
         if odds_to_add.empty:
             return("No odds to add right now.")
@@ -580,7 +629,8 @@ class NFL_Data_Packer(Sports_DB_Packer):
             # Process data
             games_data = games_data[games_data['Location'] == 'Home']
             games_data = self.format_team_game_history(games_data)
-            games_data = games_data[games_data['Date'] >= most_recent_game_w_outcome]
+            if most_recent_game_w_outcome:
+                games_data = games_data[games_data['Date'] >= most_recent_game_w_outcome]
 
             # Check if DataFrame is empty
             if games_data.empty:
@@ -602,7 +652,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         self.all_games_data = games_data_by_team
         self.games_data_retrieved = True
 
-    def pack_games_data(self, acknowdedged: bool = False) -> None:
+    def pack_games_data(self, acknowledged: bool = False) -> None:
         """This function is setup to pack all the games data into the GAMES table in the db.
         This should only have to be run to catch up if the scripts haven't run in a while.
         
@@ -613,7 +663,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
                 self.get_all_games_data()
             except Exception:
                 raise ValueError("Game data not yet packed, run self.pack_games_data().")
-        if not acknowdedged:
+        if not acknowledged:
             raise ValueError("""This function is setup to pack all the games data into the GAMES table in the db.
                                 This should only have to be run to catch up if the scripts haven't run in a while.
                                 
@@ -623,8 +673,8 @@ class NFL_Data_Packer(Sports_DB_Packer):
                                 Rerun with acknowledged as True to run the function.""")
 
         games_table_data = copy.deepcopy(self.all_games_data)
-
-        games_table_data = games_table_data[games_table_data['Date'] >= self.most_recent_game_date]
+        if self.most_recent_game_date:
+            games_table_data = games_table_data[games_table_data['Date'] >= self.most_recent_game_date]
 
         for team, df in games_table_data.items():
             df = df[['home_serial', 'away_serial', 'Date', 'League Serial']]
@@ -644,20 +694,12 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
         # Call all current game data in the db
         games_df = self.manager.dataframe_query('select * from GAMES')
-        games_df['UID'] = games_df['UID'] = (
-            games_df['HOME_TEAM_SERIAL'].astype(str) + ' ' +
-            games_df['AWAY_TEAM_SERIAL'].astype(str) + ' ' +
-            games_df['GAME_DATE'].astype(str)
-        )
+        games_df = self.get_uid(games_df,'HOME_TEAM_SERIAL','AWAY_TEAM_SERIAL','GAME_DATE')
         
         for team, df in game_outcomes_table_data.items():
             # Process each df and add UID
             df = df[['Date', 'home_serial','away_serial','Result','Points','Opp Points']]
-            df['UID'] = (
-                df['home_serial'].astype(str) + ' ' +
-                df['away_serial'].astype(str) + ' ' +
-                df['Date'].astype(str)
-                )   
+            df = self.get_uid(df, 'home_serial', 'away_serial', 'Date')  
             # Join the team df to the current db games data using the UID 
             joined_df = pd.merge(df,games_df, on='UID', how='inner')
             # Identify the winner for each game by team serial
@@ -669,10 +711,12 @@ class NFL_Data_Packer(Sports_DB_Packer):
             joined_df = joined_df[['SERIAL', 'winner_serial', 'Points', 'Opp Points']]
             self.df_to_db('GAME_OUTCOMES', joined_df, debug=debug)
 
-    def pack_all_games_data(self) -> None:
+    def pack_all_games_data(self, acknowledged: bool = False) -> None:
         """Combining all funcs needed to get all the prior games and game outcomes for the
-        entire season. This shouldn't be called every time."""        
-        self.pack_games_data()
+        entire season. This shouldn't be called every time.
+        Args:
+            acknowledged (bool): Understand the risks of doubling the data"""                
+        self.pack_games_data(acknowledged=acknowledged)
         self.pack_game_outcomes_data()
     # Put it all together
 
@@ -720,23 +764,29 @@ class NFL_Data_Packer(Sports_DB_Packer):
         
         Args:
             pack_all_games_data (bool): If true, this will get all the 
-            game data for the season and put it."""
+            game data for the season and put it in the games table.
+            acknowledged (bool): acknowledging that you know the risks that come
+            with duplicating a ton of data if you pack the games data for the
+            whole season. """
         
         # get PPG OPPG stats
         self.pack_ppg_oppg()
 
         # Get odds data
-        self.full_odds_run()
+        if not pack_all_games_data:
+            self.full_odds_run()
+            if self.is_new_week():
+                self.pack_game_outcomes_data()
 
         # Pack all the games data if option is selected - NOT standard run.
         # Use in case of a fresh db.
         if pack_all_games_data:
-            self.pack_all_games_data(acknowledged=acknowledged)
+            self.pack_all_games_data(acknowledged=acknowledged)            
+            self.full_odds_run()
             return None
 
         # Check if it's a new week yet and get game outcomes data if so.
-        if self.is_new_week():
-            self.pack_game_outcomes_data()
+        
 
         self.insert_new_db_updated_date() # Insert new updated record into the db
 
