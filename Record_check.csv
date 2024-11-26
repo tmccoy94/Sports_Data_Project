@@ -1,0 +1,81 @@
+,SERIAL,HOME_TEAM_NAME,HOME_TEAM_SERIAL,AWAY_TEAM_NAME,AWAY_TEAM_SERIAL,GAME_DATE,GO_SERIAL,WINNER_TEAM_SERIAL,WINNER_TEAM
+0,5,Arizona Cardinals,1,Las Vegas Raiders,18,2024-09-15 00:00:00,1,1,Arizona Cardinals
+1,8,Arizona Cardinals,1,Miami Dolphins,17,2024-10-21 00:00:00,4,1,Arizona Cardinals
+2,10,Arizona Cardinals,1,New Orleans Saints,23,2024-11-10 00:00:00,6,1,Arizona Cardinals
+3,13,Atlanta Falcons,2,New York Jets,25,2024-09-29 00:00:00,9,2,Atlanta Falcons
+4,17,Baltimore Ravens,3,Los Angeles Chargers,19,2024-09-15 00:00:00,13,19,Los Angeles Chargers
+5,4,Buffalo Bills,4,Los Angeles Rams,20,2024-11-03 00:00:00,21,4,Buffalo Bills
+6,22,Carolina Panthers,5,Miami Dolphins,17,2024-09-15 00:00:00,22,17,Miami Dolphins
+7,25,Carolina Panthers,5,New York Jets,25,2024-11-03 00:00:00,25,5,Carolina Panthers
+8,27,Chicago Bears,6,Las Vegas Raiders,18,2024-09-29 00:00:00,27,6,Chicago Bears
+9,29,Chicago Bears,6,New York Giants,24,2024-11-10 00:00:00,29,24,New York Giants
+10,30,Cincinnati Bengals,7,New York Giants,24,2024-09-08 00:00:00,30,24,New York Giants
+11,34,Cincinnati Bengals,7,Los Angeles Chargers,19,2024-11-03 00:00:00,34,7,Cincinnati Bengals
+12,36,Cleveland Browns,8,New England Patriots,22,2024-09-22 00:00:00,36,22,New England Patriots
+13,39,Cleveland Browns,8,Miami Dolphins,17,2024-11-03 00:00:00,39,17,Miami Dolphins
+14,40,Dallas Cowboys,9,New York Jets,25,2024-09-15 00:00:00,40,25,New York Jets
+15,45,Denver Broncos,10,Los Angeles Chargers,19,2024-10-06 00:00:00,45,10,Denver Broncos
+16,46,Denver Broncos,10,Miami Dolphins,17,2024-10-13 00:00:00,46,17,Miami Dolphins
+17,48,Detroit Lions,11,Las Vegas Raiders,18,2024-09-08 00:00:00,48,11,Detroit Lions
+18,65,Indianapolis Colts,14,Los Angeles Rams,20,2024-10-20 00:00:00,65,14,Indianapolis Colts
+19,73,Kansas City Chiefs,16,New York Jets,25,2024-10-07 00:00:00,73,16,Kansas City Chiefs
+20,76,Miami Dolphins,17,Jacksonville Jaguars,15,2024-09-08 00:00:00,76,17,Miami Dolphins
+21,77,Miami Dolphins,17,Buffalo Bills,4,2024-09-12 00:00:00,77,4,Buffalo Bills
+22,78,Miami Dolphins,17,Tennessee Titans,31,2024-09-30 00:00:00,78,31,Tennessee Titans
+23,79,Miami Dolphins,17,Arizona Cardinals,1,2024-10-27 00:00:00,79,1,Arizona Cardinals
+24,154,Miami Dolphins,17,Los Angeles Chargers,19,2024-11-17 00:00:00,154,17,Miami Dolphins
+25,154,Miami Dolphins,17,Los Angeles Chargers,19,2024-11-17 00:00:00,154,17,Miami Dolphins
+26,80,Las Vegas Raiders,18,Carolina Panthers,5,2024-09-22 00:00:00,80,5,Carolina Panthers
+27,81,Las Vegas Raiders,18,Cleveland Browns,8,2024-09-29 00:00:00,81,18,Las Vegas Raiders
+28,82,Las Vegas Raiders,18,Pittsburgh Steelers,27,2024-10-13 00:00:00,82,27,Pittsburgh Steelers
+29,83,Las Vegas Raiders,18,Kansas City Chiefs,16,2024-10-27 00:00:00,83,16,Kansas City Chiefs
+30,84,Los Angeles Chargers,19,Los Angeles Chargers,19,2024-09-08 00:00:00,84,19,Los Angeles Chargers
+31,85,Los Angeles Chargers,19,Kansas City Chiefs,16,2024-09-29 00:00:00,85,16,Kansas City Chiefs
+32,86,Los Angeles Chargers,19,New York Jets,25,2024-10-27 00:00:00,86,19,Los Angeles Chargers
+33,87,Los Angeles Chargers,19,Tennessee Titans,31,2024-11-10 00:00:00,87,19,Los Angeles Chargers
+34,155,Los Angeles Chargers,19,Cincinnati Bengals,7,2024-11-17 00:00:00,155,19,Los Angeles Chargers
+35,84,Los Angeles Chargers,19,Los Angeles Chargers,19,2024-09-08 00:00:00,84,19,Los Angeles Chargers
+36,86,Los Angeles Chargers,19,New York Jets,25,2024-10-27 00:00:00,86,19,Los Angeles Chargers
+37,88,Los Angeles Rams,20,San Francisco 49ers,28,2024-09-22 00:00:00,88,20,Los Angeles Rams
+38,89,Los Angeles Rams,20,Green Bay Packers,12,2024-10-06 00:00:00,89,12,Green Bay Packers
+39,90,Los Angeles Rams,20,Los Angeles Chargers,19,2024-10-20 00:00:00,90,20,Los Angeles Rams
+40,91,Los Angeles Rams,20,Minnesota Vikings,21,2024-10-24 00:00:00,91,20,Los Angeles Rams
+41,92,Los Angeles Rams,20,Los Angeles Rams,20,2024-11-11 00:00:00,92,20,Los Angeles Rams
+42,90,Los Angeles Rams,20,Los Angeles Chargers,19,2024-10-20 00:00:00,90,20,Los Angeles Rams
+43,92,Los Angeles Rams,20,Los Angeles Rams,20,2024-11-11 00:00:00,92,20,Los Angeles Rams
+44,97,New England Patriots,22,Seattle Seahawks,29,2024-09-15 00:00:00,97,29,Seattle Seahawks
+45,98,New England Patriots,22,Los Angeles Rams,20,2024-10-06 00:00:00,98,20,Los Angeles Rams
+46,99,New England Patriots,22,Houston Texans,13,2024-10-13 00:00:00,99,13,Houston Texans
+47,100,New England Patriots,22,New Orleans Saints,23,2024-10-27 00:00:00,100,22,New England Patriots
+48,156,New England Patriots,22,Las Vegas Raiders,18,2024-11-17 00:00:00,156,18,Las Vegas Raiders
+49,98,New England Patriots,22,Los Angeles Rams,20,2024-10-06 00:00:00,98,20,Los Angeles Rams
+50,100,New England Patriots,22,New Orleans Saints,23,2024-10-27 00:00:00,100,22,New England Patriots
+51,156,New England Patriots,22,Las Vegas Raiders,18,2024-11-17 00:00:00,156,18,Las Vegas Raiders
+52,101,New Orleans Saints,23,Carolina Panthers,5,2024-09-08 00:00:00,101,23,New Orleans Saints
+53,102,New Orleans Saints,23,Philadelphia Eagles,26,2024-09-22 00:00:00,102,26,Philadelphia Eagles
+54,103,New Orleans Saints,23,Tampa Bay Buccaneers,30,2024-10-13 00:00:00,103,30,Tampa Bay Buccaneers
+55,104,New Orleans Saints,23,Denver Broncos,10,2024-10-17 00:00:00,104,10,Denver Broncos
+56,105,New Orleans Saints,23,Atlanta Falcons,2,2024-11-10 00:00:00,105,23,New Orleans Saints
+57,157,New Orleans Saints,23,Cleveland Browns,8,2024-11-17 00:00:00,157,23,New Orleans Saints
+58,106,New York Giants,24,Minnesota Vikings,21,2024-09-08 00:00:00,106,21,Minnesota Vikings
+59,107,New York Giants,24,Dallas Cowboys,9,2024-09-26 00:00:00,107,9,Dallas Cowboys
+60,108,New York Giants,24,Cincinnati Bengals,7,2024-10-13 00:00:00,108,7,Cincinnati Bengals
+61,109,New York Giants,24,Philadelphia Eagles,26,2024-10-20 00:00:00,109,26,Philadelphia Eagles
+62,110,New York Giants,24,Washington Commanders,32,2024-11-03 00:00:00,110,32,Washington Commanders
+63,111,New York Jets,25,New York Giants,24,2024-09-19 00:00:00,111,25,New York Jets
+64,112,New York Jets,25,Denver Broncos,10,2024-09-29 00:00:00,112,10,Denver Broncos
+65,113,New York Jets,25,Buffalo Bills,4,2024-10-14 00:00:00,113,4,Buffalo Bills
+66,114,New York Jets,25,Houston Texans,13,2024-10-31 00:00:00,114,25,New York Jets
+67,158,New York Jets,25,Indianapolis Colts,14,2024-11-17 00:00:00,158,14,Indianapolis Colts
+68,111,New York Jets,25,New York Giants,24,2024-09-19 00:00:00,111,25,New York Jets
+69,119,Pittsburgh Steelers,27,Miami Dolphins,17,2024-09-22 00:00:00,119,27,Pittsburgh Steelers
+70,121,Pittsburgh Steelers,27,New Orleans Saints,23,2024-10-20 00:00:00,121,27,Pittsburgh Steelers
+71,122,Pittsburgh Steelers,27,New England Patriots,22,2024-10-28 00:00:00,122,27,Pittsburgh Steelers
+72,123,San Francisco 49ers,28,New Orleans Saints,23,2024-09-09 00:00:00,123,28,San Francisco 49ers
+73,124,San Francisco 49ers,28,New York Giants,24,2024-09-29 00:00:00,124,28,San Francisco 49ers
+74,129,Seattle Seahawks,29,Los Angeles Rams,20,2024-09-22 00:00:00,129,29,Seattle Seahawks
+75,130,Seattle Seahawks,29,New England Patriots,22,2024-10-06 00:00:00,130,22,New England Patriots
+76,133,Seattle Seahawks,29,Las Vegas Raiders,18,2024-11-03 00:00:00,133,18,Las Vegas Raiders
+77,140,Tennessee Titans,31,New Orleans Saints,23,2024-09-15 00:00:00,140,23,New Orleans Saints
+78,143,Tennessee Titans,31,New York Giants,24,2024-11-03 00:00:00,143,31,Tennessee Titans
+79,144,Washington Commanders,32,New England Patriots,22,2024-09-15 00:00:00,144,32,Washington Commanders
