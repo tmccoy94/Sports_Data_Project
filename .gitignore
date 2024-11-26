@@ -1,3 +1,4 @@
+backup-files.ps1
 restricted.py
 # Byte-compiled / optimized / DLL files
 */__pycache__/
