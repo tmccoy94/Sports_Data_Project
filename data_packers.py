@@ -264,7 +264,7 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
     
     def insert_new_db_updated_date(self) -> None:
         """Insert a new updated date into the db after updates are done"""
-        now =  datetime.now().strftime(self.db_manager.db_date_format)
+        now: str =  datetime.now().strftime(self.db_manager.db_date_format)
 
         self.db_manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
 
@@ -279,8 +279,8 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
             raise AttributeError("""This object does not have a last updated date to check if 
                                  it's a new week.""")
 
-        last_updated_date = self.db_last_updated_date
-        date_format = self.db_manager.db_date_format
+        last_updated_date: str = self.db_last_updated_date
+        date_format: str = self.db_manager.db_date_format
 
         # Parse the last updated date
         try:
@@ -338,9 +338,7 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         if not self.league_serial:
             raise AttributeError("self.league_serial must be populated to use this function.")
         if self.odds_df.empty:
-            raise AttributeError("You haven't yet called the odds api info to compare this with.")
-        
-        
+            raise AttributeError("You haven't yet called the odds api info to compare this with.")      
 
         odds_df_copy: pd.DataFrame = copy.deepcopy(self.odds_df)
 
@@ -595,7 +593,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
     odds, it has to do with the odds api.
     """
 
-    def __init__(self, db_name: str, debug = False):
+    def __init__(self, db_name: str, league_name: str = 'NFL', debug = False):
         """
         Here we query the Sports DB for the league that is chosen in the data packer,
         get the odds info from the inhereted 
@@ -609,7 +607,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         """
         super().__init__(db_name)   
         self.debug = debug
-        self.league: str = 'NFL'
+        self.league: str = league_name
         self.sport : str = self._get_sport(self.league)
         self.league_serial: int = self._get_league_serial(self.league)        
         self.db_last_updated_date: str = self._query_last_db_updated_date()
@@ -850,7 +848,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         # Use in case of a fresh db.
         if pack_all_games_data:
             print("Fetching all games data.")
-            self.pack_all_games_data(acknowledged=acknowledged)  
+            self.pack_all_games_data(acknowledged=acknowledged)
             print("Fetching odds data")          
             self.full_odds_run()
                 
