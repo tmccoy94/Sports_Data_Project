@@ -19,63 +19,71 @@ class Team_Games_Scraper:
     # maybe build out some funcs here that ensure that the team_name and tr_url_name exist in the db
 
 class OddsApiCallerMixin:
-    """This class is intended to be used for calling the odds api information and returning it."""
-    def __init__(self, regions: str = 'us', markets: str = 'spreads,totals,h2h', odds_format: str = 'decimal',
-                 odds_date_format: str = 'iso', api_key: str = odds_api_key):
-        self.api_key: str = api_key
-        self.regions: str = regions
-        self.markets: str = markets
-        self.odds_format: str = odds_format
-        self.odds_date_format: str = odds_date_format
-        self.requests_remaining: int = None
-        self.requests_used: int = None
-        self.odds_called: bool = False # changed after odds api is called
-        self.documentation = 'https://the-odds-api.com/liveapi/guides/v4/'
-
-    def call_odds_api(self, sport: str, regions: str, markets: str, odds_format: str, odds_date_format: str) -> dict:
-        """
-        Call the odds api and store the response as a json.
-
-        This object has a self.documentation attr that ahs the odds api docs link in it
-        if you want to reference those docs.
-
-        Args:
-          sport (str): The sport you are using. Reference odds api docs.
+    """This class is intended to be used for calling the odds api information and returning it.
+    Args:
+          sport (str): The sport you are looking for. Reference odds api docs.
           regions (str): The regions you are using. Reference odds api docs.
           markets (str): The markets you are using. Reference odds api docs.
           odds_format (str): The fomat you want the odds for the games to pull in. 
           Reference odds api docs.
           odds_date_format(str): The format you want the odds api dates to pull in. 
-          Reference odds api docs.
+          Reference odds api docs."""
+    def __init__(self, regions: str = 'us', markets: str = 'spreads,totals,h2h', odds_format: str = 'decimal',
+                 odds_date_format: str = 'iso', api_key: str = odds_api_key, time_zone: str = 'America/New_York'):
+        self.api_key: str = api_key
+        self.regions: str = regions
+        self.markets: str = markets
+        self.odds_format: str = odds_format
+        self.odds_date_format: str = odds_date_format
+        self.time_zone: str = time_zone
+        self.requests_remaining: int = None
+        self.requests_used: int = None
+        self.odds_called: bool = False # changed after odds api is called
+        self.sport: str = None # defined in subclasses
+        self.documentation = 'https://the-odds-api.com/liveapi/guides/v4/'
+
+    def call_odds_api(self, retries: int = 3, delay: int = 5) -> dict:
+        """
+        Call the odds api and store the response as a json.
+
+        This object has a self.documentation attr that has the odds api docs link in it
+        if you want to reference those docs.        
 
         Returns:
           JSON file from odds api call. Reference odds api docs for more info.
         """
-        odds_response = requests.get(
-            f'https://api.the-odds-api.com/v4/sports/{sport}/odds',
-            params={
-                'api_key': self.api_key,
-                'regions': regions,
-                'markets': markets,
-                'oddsFormat': odds_format,
-                'dateFormat': odds_date_format
-            }
-        )
+        for attempt in range(retries):
+            try:
+                response = requests.get(
+                    f'https://api.the-odds-api.com/v4/sports/{self.sport}/odds',
+                    params={
+                        'api_key': self.api_key,
+                        'regions': self.regions,
+                        'markets': self.markets,
+                        'oddsFormat': self.odds_format,
+                        'dateFormat': self.odds_date_format
+                    }
+                )
+                response.raise_for_status()
+                # Jsonify the results
+                odds_json = response.json()
 
-        if odds_response.status_code != 200:
-            print(f'Failed to get odds: status_code {odds_response.status_code}, response body {odds_response.text}')
+                # Check the usage quota
+                self.requests_remaining = response.headers['x-requests-remaining']
+                self.requests_used = response.headers['x-requests-used']
 
-        else:
-            # Jsonify the results
-            odds_json = odds_response.json()
+                self.odds_called = True
 
-            # Check the usage quota
-            self.requests_remaining = odds_response.headers['x-requests-remaining']
-            self.requests_used = odds_response.headers['x-requests-used']
+                return odds_json
+            except requests.exceptions.RequestException as e:
+                if attempt < retries -1:
+                    time.sleep(delay)
+                else:
+                    raise RuntimeError(f"Failed after {retries} attempts: {e}")
+                
 
-            self.odds_called = True
-
-            return odds_json
+        if response.status_code != 200:
+            print(f'Failed to get odds: status_code {response.status_code}, response body {response.text}')            
         
     def parse_market_info(self, market_name: str, market_serial: int, response_json: list[dict]) -> pd.DataFrame:
         entries = []
@@ -221,8 +229,7 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin):
     
     def get_odds_df(self) -> None:
         markets: list[tuple[int,str]] = self.get_market_info()
-        response_json: list[dict] = self.call_odds_api(self.sport, self.regions, self.markets,
-                                                       self.odds_format, self.odds_date_format)
+        response_json: list[dict] = self.call_odds_api()
 
         market_dfs = []
 
