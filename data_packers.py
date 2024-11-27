@@ -173,6 +173,7 @@ class TeamRankingsScraperMixin:
         oppg = oppg[0]
         return [ppg, oppg]
 
+# Build an object that checks the tables in the db via a dataclass? ***
 class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
     """
     This is a class buit to make getting data for a sports league from teamrankings.com, and the odds api
@@ -190,7 +191,9 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
           db_name (str): The name of the database you want to either create or refer to 
           with this object.
         """
-        super().__init__()
+        # Theses are the default args for the OddsApiCallerMixin, rewritten here for clarity.
+        super().__init__(regions = 'us', markets = 'spreads,totals,h2h', odds_format = 'decimal',
+                         odds_date_format = 'iso', time_zone = 'America/New_York')
         self.db_manager: SqliteDBManager = SqliteDBManager(db_name) # define the database you're calling from/to
         self.teams_df : pd.DataFrame = self._query_teams_table()
         self.set_teams_df(self.teams_df)        
@@ -468,17 +471,21 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         return new_entries
 
     def refresh_market_odds_table(self, debug: bool = False) -> None:
-        """Get the existing data and compare it to the newly pulled api market odds data"""
+        """Get the existing data and compare it to the newly pulled api market odds data.
+        Then insert any data that has changed on the new odds api pull."""
+        # Need to have called the odds api for this to work
         if getattr(self, 'odds_called', False):
             try:
                 self.get_odds_df()
             except Exception as e:
                 raise Exception(f"Could not get odds_df. Troubleshoot starting there. Error was: {e}")
+        # Need to have combined the odds api and games table info for this to work
         if not hasattr(self, 'combined_market_odds_df'):
             try:
                 self._combine_odds_api_and_games_dfs()
             except Exception as e:
                 raise Exception(f"Could not get combined_market_odds_df. Troubleshoot starting there. Error was: {e}")
+        # Execute assuming that all the correct info is in place to refresh any changed odds data.
         else:
             existing_mkt_odds: pd.DataFrame = self.get_existing_market_odds_records_for_called_games()
             api_mkt_odds: pd.DataFrame = copy.deepcopy(self.combined_market_odds_df)
@@ -810,25 +817,27 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
             whole season. """
         
         # get PPG OPPG stats
+        print("Fetching PPG and OPPG Data")
         self.pack_ppg_oppg()
 
         # Get odds data
         if not pack_all_games_data:
+            print("Fetching odds data")   
             self.full_odds_run()
+            # Check if it's a new week yet and get game outcomes data if so.
             if self.is_new_week():
+                print("Fetching game outcomes data.")
                 self.pack_game_outcomes_data()
 
         # Pack all the games data if option is selected - NOT standard run.
         # Use in case of a fresh db.
         if pack_all_games_data:
-            self.pack_all_games_data(acknowledged=acknowledged)            
+            print("Fetching all games data.")
+            self.pack_all_games_data(acknowledged=acknowledged)  
+            print("Fetching odds data")          
             self.full_odds_run()
-            return None
-
-        # Check if it's a new week yet and get game outcomes data if so.
-        
+                
 
         self.insert_new_db_updated_date() # Insert new updated record into the db
-
-        return "Packed all data." # Need to write a logger so we get more than this lol
+        print('Packed all data.') # Need to write a logger so we get more than this lol
 
