@@ -1,6 +1,6 @@
 import pandas as pd
 import sqlite3
-import datetime as dt
+from datetime import datetime as dt
 
 # add funcs for checking the columns and the data types later.*
 
