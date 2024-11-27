@@ -267,6 +267,38 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         now =  datetime.now().strftime(self.db_manager.db_date_format)
 
         self.db_manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
+
+    def is_new_week(self) -> bool:
+        """Use datetime to check if the db_last_updated date is in the past week.
+        
+        Returns:
+            bool: True if the most recent Sunday has passed since the last_updated_date, 
+                indicating a new calendar week. False otherwise.
+        """
+        if not self.db_last_updated_date:
+            raise AttributeError("""This object does not have a last updated date to check if 
+                                 it's a new week.""")
+
+        last_updated_date = self.db_last_updated_date
+        date_format = self.db_manager.db_date_format
+
+        # Parse the last updated date
+        try:
+            last_updated = datetime.strptime(last_updated_date, date_format)
+        except ValueError as e:
+            raise ValueError(f"Invalid date format for last_updated_date: {last_updated_date}. Expected format: {date_format}") from e
+
+        # Calculate today's date
+        today = datetime.now()
+
+        # Find the most recent Sunday (relative to today)
+        # If today is Sunday, it will return today's date; otherwise, the last Sunday.
+        days_since_sunday = today.weekday() + 1  # weekday() returns 0 for Monday, so add 1
+        most_recent_sunday = today - timedelta(days=days_since_sunday)
+
+        # Check if the most recent Sunday has passed since the last updated date
+        # AND the last updated date is before the most recent Sunday
+        return (last_updated < most_recent_sunday)
         
     def get_market_info(self) -> list[tuple[int,str]]:
         """Queries MARKETS table and returns a tuple for each market: (market serial, market name)"""
@@ -319,10 +351,10 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         # Eliminate duplicate games by only grabbing games from one market
         try:
             if self.most_recent_game_date:
-                unmade_games = odds_df_copy[(odds_df_copy['Date'] > self.most_recent_game_date) &
+                unmade_games: pd.DataFrame = odds_df_copy[(odds_df_copy['Date'] > self.most_recent_game_date) &
                                     odds_df_copy['MARKET_SERIAL'] == market_id]
             else:
-                unmade_games = odds_df_copy[odds_df_copy['MARKET_SERIAL'] == market_id]
+                unmade_games: pd.DataFrame = odds_df_copy[odds_df_copy['MARKET_SERIAL'] == market_id]
         except KeyError as e:
             raise KeyError(f"""Looks like when you called the odds api the columns in the df did not populate
                            correctly. See specific error: {e}. See self.get_odds_df for more.""")
@@ -331,6 +363,11 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
 
         # Drop all columns except for what is needed for the games table
         unmade_games = unmade_games[['home_serial', 'away_serial', 'Date', 'league_serial']]
+
+        if unmade_games.empty:
+            print("No unmade games to add to the db")
+            self.future_games_checked = True
+            return None
 
         self.db_manager.df_to_db('GAMES', unmade_games, debug=debug)
 
@@ -423,7 +460,7 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         else:
             
              # Retrieve game serials to query for
-            game_serials: pd.Series[int] = self.combined_market_odds_df['SERIAL'].unique()   
+            game_serials: list[str]= self.combined_market_odds_df['SERIAL'].unique()   
             existing_game_data = self.db_manager.dataframe_query(f"""SELECT * FROM GAME_MARKET_ODDS 
                                                               WHERE GAME_SERIAL IN 
                                                               {tuple(str(serial) for serial in game_serials)}""")
@@ -458,8 +495,8 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
                 if self.market_odds_have_changed(api_row, row):
                     # Append tuple or other logic for changed rows
                     new_rows.append({
-                        'GAME_SERIAL': api_data['SERIAL'],
-                        'MARKET_SERIAL': api_data['MARKET_SERIAL'],
+                        'GAME_SERIAL': api_row['SERIAL'],
+                        'MARKET_SERIAL': api_row['MARKET_SERIAL'],
                         'SPREAD_HOME': api_row['SPREAD_HOME'],
                         'TOTAL': api_row['TOTAL'],
                         'H2H_HOME': api_row['H2H_HOME'],
@@ -491,13 +528,17 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
             api_mkt_odds: pd.DataFrame = copy.deepcopy(self.combined_market_odds_df)
             api_mkt_odds = api_mkt_odds.drop('Date', axis=1) # drop date column for comparison
 
-            new_entries = self.get_changed_market_odds(existing_mkt_odds,api_mkt_odds)
+            new_entries = self.get_changed_market_odds(existing_data=existing_mkt_odds,api_data=api_mkt_odds)
 
 
             if new_entries.empty:
-                return ("No game odds that exist have changed.")
+                print("No game odds that exist have changed.")
+                return None
             else:
-                self.db_manager.df_to_db("GAME_MARKET_ODDS",new_entries,debug=debug)
+                try:
+                    self.db_manager.df_to_db("GAME_MARKET_ODDS",new_entries,debug=debug)
+                except Exception as e:
+                    raise RuntimeError(f"Failed to insert records for market odds tabel refresh function:\n {e}")
 
     def pack_odds_table(self, debug: bool = False) -> None:
         """Compare the most recently added game odds to what is in the api data, then
@@ -522,15 +563,18 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
                                                                     most_recent_game_date_has_odds)]
 
         if odds_to_add.empty:
-            return("No odds to add right now.")
+            print("No odds to add right now.")
+            return None
         
         # Drop game date so df can go in market odds table
         odds_to_add = odds_to_add.drop('Date', axis=1)
 
         if debug:
             print(odds_to_add)
-        
-        self.db_manager.df_to_db('GAME_MARKET_ODDS', odds_to_add, debug=debug)
+        try:
+            self.db_manager.df_to_db('GAME_MARKET_ODDS', odds_to_add, debug=debug)
+        except Exception as e:
+                    raise RuntimeError(f"Failed to insert records for market odds pack odds table function:\n {e}")
     
     def full_odds_run(self):
         # Run the full odds api process and insert the records.
@@ -758,6 +802,8 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
             joined_df = joined_df[['SERIAL', 'winner_serial', 'Points', 'Opp Points']]
             self.db_manager.df_to_db('GAME_OUTCOMES', joined_df, debug=debug)
 
+        print(f"Game outcomes data added, added {len(joined_df)} records.")
+
     def pack_all_games_data(self, acknowledged: bool = False) -> None:
         """Combining all funcs needed to get all the prior games and game outcomes for the
         entire season. This shouldn't be called every time.
@@ -767,36 +813,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         self.pack_game_outcomes_data()
     # Put it all together
 
-    def is_new_week(self) -> bool:
-        """Use datetime to check if the db_last_updated date is in the past week.
-        
-        Returns:
-            bool: True if the most recent Sunday has passed since the last_updated_date, 
-                indicating a new calendar week. False otherwise.
-        """
-
-        last_updated_date = self.db_last_updated_date
-        date_format = self.db_manager.db_date_format
-
-        # Parse the last updated date
-        try:
-            last_updated = datetime.strptime(last_updated_date, date_format)
-        except ValueError as e:
-            raise ValueError(f"Invalid date format for last_updated_date: {last_updated_date}. Expected format: {date_format}") from e
-
-        # Calculate today's date
-        today = datetime.now()
-
-        # Find the most recent Sunday (relative to today)
-        # If today is Sunday, it will return today's date; otherwise, the last Sunday.
-        days_since_sunday = today.weekday() + 1  # weekday() returns 0 for Monday, so add 1
-        most_recent_sunday = today - timedelta(days=days_since_sunday)
-
-        # Check if the most recent Sunday has passed since the last updated date
-        # AND the last updated date is before the most recent Sunday
-        return (last_updated < most_recent_sunday)
-
-        pass
+    
 
     def full_pack(self, pack_all_games_data: bool = False, acknowledged: bool = False) -> None:
         f"""This func is designed to run a standard data gathering for the {self.league}.
