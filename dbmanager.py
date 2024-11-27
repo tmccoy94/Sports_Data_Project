@@ -569,5 +569,5 @@ class SqliteDBManager:
             Here are the list of tables: {self.tables}""")
         row_tuples = [tuple(row) for row in df.itertuples(index=False, name=None)]
     
-        self.manager.insert_table_records(table_name, records=row_tuples, debug=debug)
+        self.insert_table_records(table_name, records=row_tuples, debug=debug)
 

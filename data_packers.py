@@ -124,9 +124,56 @@ class OddsApiCallerMixin:
         print(f"You have used {self.requests_used} calls and have {self.requests_remaining} remaining.")  
 
 class TeamRankingsScraperMixin:
-    pass
 
-class Sports_Odds_DB_Packer(OddsApiCallerMixin):
+    def set_teams_df(self, teams_df: pd.DataFrame):
+        self.teams_df: pd.DataFrame = teams_df
+        self.team_tr_table_key: dict[str, str] = self._build_team_tr_table_key() 
+        self.url_ref_dict: dict[str, str] = self._build_tr_url_ref_dict()
+        self.opponent_map: dict[str, str] = self._build_opponent_map()
+
+
+    def _build_team_tr_table_key(self) -> dict[str, str]:
+        """
+        This grabs the names that teamranks uses in their tables that we scrape with this object
+        then matches them with the team serials that exist in the Sports Data database so that
+        they can be sent into the STATS tables that the TEAMS table is connected to.
+
+        
+        """
+        return {x:y for x,y in zip(self.teams_df['TR_TABLE_NAME'], self.teams_df['SERIAL'])}
+    
+    def _build_tr_url_ref_dict(self) -> dict[str, str]:
+        """
+        This uses the teamranks URL column in the teams table so that you can scrape the data for
+        each team from the database. For use in the team scrape functionality.
+
+        
+        """
+        return {team_name: url_name for team_name, url_name in zip(self.teams_df['TEAM_NAME'], 
+                                                                   self.teams_df['TR_URL_NAME'])}
+    
+    def _build_opponent_map(self) -> dict[str, str]:
+        """Returns:
+         A dict used to map the names of opponents on team schedule to names that will
+        match what the names are in the Sports DB."""
+        return {team_tr_name: url_name for team_tr_name, url_name in zip(self.teams_df['TR_TABLE_NAME'], 
+                                                                         self.teams_df['TEAM_NAME'])}
+    
+    # This section is for OPPG and PPG stats calling and packing
+    
+    def _call_tr_ppg_and_oppg(self, league) -> list[pd.DataFrame]:
+        """
+        Call the info from the teamrankings site for points per game and opponents points per game.
+        """
+        
+        ppg = pd.read_html(f"https://www.teamrankings.com/{league.lower()}/stat/points-per-game")
+        oppg = pd.read_html(f"https://www.teamrankings.com/{league.lower()}/stat/opponent-points-per-game")
+
+        ppg = ppg[0]
+        oppg = oppg[0]
+        return [ppg, oppg]
+
+class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
     """
     This is a class buit to make getting data for a sports league from teamrankings.com, and the odds api
     and packing it into an SQLite database. In this case using another class, SqliteDBManager. This should
@@ -143,7 +190,10 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin):
           db_name (str): The name of the database you want to either create or refer to 
           with this object.
         """
-        super().__init__()        
+        super().__init__()
+        self.db_manager: SqliteDBManager = SqliteDBManager(db_name) # define the database you're calling from/to
+        self.teams_df : pd.DataFrame = self._query_teams_table()
+        self.set_teams_df(self.teams_df)        
         self.sport: str = None # defined in sublcasses
         self.db_last_updated_date: str = None # defined in sublcasses
         self.most_recent_game_date: str = None # defined in sublcasses 
@@ -151,8 +201,8 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin):
         self.odds_df: pd.DataFrame = None # info pulled from odds api
         self.combined_market_odds_df: pd.DataFrame = None # Combine odds_df and games_table info
         self.future_games_checked: bool = False # check if future games have been accounted for yet
-        self.db_manager: SqliteDBManager = SqliteDBManager(db_name) # define the database you're calling from/to
-        self.teams_df : pd.DataFrame = self._query_teams_table() # League specified in subclasses    
+        
+         # League specified in subclasses    
         self.team_serial_ref_dict: dict[str, str] = self._build_team_serial_ref() # League specified in subclasses
 
     def _query_last_db_updated_date(self) -> str:
@@ -510,55 +560,12 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         self.debug = debug
         self.league: str = 'NFL'
         self.sport : str = self._get_sport(self.league)
-        self.league_serial: int = self._get_league_serial(self.league)
-        self.team_tr_table_key: dict[str, str] = self._build_team_tr_table_key() 
-        self.url_ref_dict: dict[str, str] = self._build_tr_url_ref_dict()
-        self.opponent_map = self._build_opponent_map()
+        self.league_serial: int = self._get_league_serial(self.league)        
         self.db_last_updated_date: str = self._query_last_db_updated_date()
         self.most_recent_game_date: str = self._query_most_recent_game_date() 
         self.odds_df: pd.DataFrame = None
         self.all_games_data: dict[str,pd.DataFrame] = None
         self.games_data_retrieved: bool = False
-
-    
-
-    def _build_team_tr_table_key(self) -> dict[str, str]:
-        """
-        This grabs the names that teamranks uses in their tables that we scrape with this object
-        then matches them with the team serials that exist in the Sports Data database so that
-        they can be sent into the STATS tables that the TEAMS table is connected to.
-        """
-        return {x:y for x,y in zip(self.teams_df['TR_TABLE_NAME'], self.teams_df['SERIAL'])}
-    
-    def _build_tr_url_ref_dict(self) -> dict[str, str]:
-        """
-        This uses the teamranks URL column in the teams table so that you can scrape the data for
-        each team from the database. For use in the team scrape functionality.
-        """
-        return {team_name: url_name for team_name, url_name in zip(self.teams_df['TEAM_NAME'], 
-                                                                   self.teams_df['TR_URL_NAME'])}
-    
-    def _build_opponent_map(self) -> dict[str, str]:
-        """Returns a dict used to map the names of opponents on team schedule to names that will
-        match what the names are in the Sports DB."""
-        return {team_tr_name: url_name for team_tr_name, url_name in zip(self.teams_df['TR_TABLE_NAME'], 
-                                                                         self.teams_df['TEAM_NAME'])}
-    
-    # This section is for OPPG and PPG stats calling and packing
-    
-    def _call_tr_ppg_and_oppg(self) -> list[pd.DataFrame]:
-        """
-        Call the info from the teamrankings site for points per game and opponents points per game.
-        """
-            
-        league: str = self.db_manager.fetch_records(f"SELECT TR_URL_NAME FROM LEAGUES WHERE NAME = '{self.league.upper()}'", 'one')
-        league = league[0][0] #unpack tuple
-        ppg = pd.read_html(f"https://www.teamrankings.com/{league.lower()}/stat/points-per-game")
-        oppg = pd.read_html(f"https://www.teamrankings.com/{league.lower()}/stat/opponent-points-per-game")
-
-        ppg = ppg[0]
-        oppg = oppg[0]
-        return [ppg, oppg]
     
     def _reorder_team_data_ppg_oppg(self,df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -584,7 +591,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
           by setting this arg to False(default val).
         """
         # Get the data
-        ppg, oppg = self._call_tr_ppg_and_oppg()
+        ppg, oppg = self._call_tr_ppg_and_oppg(self.league)
         # Get cols in line with DB formatting
         ppg['TEAM_SERIAL'] = [self.team_tr_table_key[key] for key in ppg['Team']]
         oppg['TEAM_SERIAL'] = [self.team_tr_table_key[key] for key in oppg['Team']]
