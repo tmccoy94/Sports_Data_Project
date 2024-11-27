@@ -5,8 +5,8 @@ from dbmanager import SqliteDBManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import pytz
-from typing import Any
-import time, copy
+import time
+import copy
 
 LOCAL_TIMEZONE = 'America/New_York'
 
@@ -16,13 +16,20 @@ class Team_Games_Scraper:
     team_name: str
     tr_url_name: str
 
+class OddsApiCallerMixin:
+    pass
+
+class TeamRankingsScraperMixin:
+    pass
 
 class Sports_DB_Packer:
     """
     This is a class buit to make getting data for a sports league from teamrankings.com, and the odds api
-    and packing it into an SQLite database. In this case using the other class, SqliteDBManager.
+    and packing it into an SQLite database. In this case using another class, SqliteDBManager. This should
+    be in a separate module included with this program.
 
-    This is made specifically for the SportsData db created for the sports data app, but could be easily changed. 
+    This is made specifically for the SportsData db created for the sports data app, but could be easily changed.
+    I have tried to write it to be as extensible as possible. 
     """
     def __init__(self):
         self.api_key: str = odds_api_key
@@ -41,31 +48,43 @@ class Sports_DB_Packer:
         self.odds_df: pd.DataFrame = None # info pulled from odds api
         self.combined_market_odds_df: pd.DataFrame = None # Combine odds_df and games_table info
         self.future_games_checked: bool = False # check if future games have been accounted for yet
-        self.manager: SqliteDBManager = SqliteDBManager('SportsData.db')
-        self.tables: list[str] = self.manager.check_table_names_in_db()
+        self.db_manager: SqliteDBManager = SqliteDBManager('SportsData.db')
+        
          
         self.teams_df : pd.DataFrame = self._query_teams_table()        
         self.team_serial_ref_dict: dict[str, str] = self._build_team_serial_ref()
 
     def _query_last_db_updated_date(self) -> str:
-        """Get date the sports db was last updated"""
-        db_last_updated_date = self.manager.fetch_records(f"""SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATE_RECORDS
+        """Get date the sports db was last updated.
+
+        You can only call this function in a subclass to Sports_DB_Packer that has defined what league it is using.
+
+        Returns:
+          date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S"""
+        db_last_updated_date: str = self.db_manager.fetch_records(f"""SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATE_RECORDS
                                           WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')[0][0]
-        return db_last_updated_date
+        return db_last_updated_date 
     
     def _query_most_recent_game_date(self) -> str:
-        most_recent_game_date = self.manager.fetch_records(f"""SELECT MAX(GAME_DATE) FROM GAMES
+        """Get date the sports db contains for a game.
+
+        You can only call this function in a subclass to Sports_DB_Packer that has defined what league it is using.
+
+        Returns:
+          date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S"""
+        most_recent_game_date = self.db_manager.fetch_records(f"""SELECT MAX(GAME_DATE) FROM GAMES
                                                WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')[0][0]
         return most_recent_game_date
         
     def _get_sport(self, league: str) -> str:
         """
         Retrieve odds api sport name for the api call from the database.
+        This type of name is intended to go into a URL for the odds api.
 
         Args:
           League (str): The name of the league you are querying from the DB.
         """
-        sport: str = self.manager.fetch_records(f"SELECT ODDS_URL_NAME FROM LEAGUES WHERE NAME ='{league}'",
+        sport: str = self.db_manager.fetch_records(f"SELECT ODDS_URL_NAME FROM LEAGUES WHERE NAME ='{league}'",
                                    fetchstyle='one')
         return sport[0][0] # unpack tuple list to get val
     
@@ -76,14 +95,14 @@ class Sports_DB_Packer:
         Args:
           League (str): The name of the league you are querying from the DB.
         """
-        serial: int = self.manager.fetch_records(f"SELECT SERIAL FROM LEAGUES WHERE NAME ='{league}'",
+        serial: int = self.db_manager.fetch_records(f"SELECT SERIAL FROM LEAGUES WHERE NAME ='{league}'",
                                    fetchstyle='one')
         return serial[0][0] # unpack tuple list to get val
     
     # Query and create everything needed for all functionality here
     def _query_teams_table(self) -> pd.DataFrame:
         """Queries the TEAMS table in the db as a df for use in gathering teams data."""
-        return self.manager.dataframe_query("select * from TEAMS")
+        return self.db_manager.dataframe_query("select * from TEAMS")
     
     def _build_team_serial_ref(self) -> dict[str, int]:
         """For referencing the team name to the team serial for all teams in db for this league"""
@@ -93,7 +112,7 @@ class Sports_DB_Packer:
         """Insert a new updated date into the db after updates are done"""
         now =  datetime.now().strftime(self.db_date_format)
 
-        self.manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
+        self.db_manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
     
     def call_odds_api(self) -> dict:
         """
@@ -126,7 +145,7 @@ class Sports_DB_Packer:
     def get_market_info(self) -> list[tuple[int,str]]:
         """Queries MARKETS table and returns a tuple for each market: (market serial, market name)"""
 
-        markets_table = self.manager.dataframe_query('SELECT * FROM MARKETS')
+        markets_table = self.db_manager.dataframe_query('SELECT * FROM MARKETS')
 
         markets = []
 
@@ -227,7 +246,7 @@ class Sports_DB_Packer:
         # Drop all columns except for what is needed for the games table
         unmade_games = unmade_games[['home_serial', 'away_serial', 'Date', 'league_serial']]
 
-        self.df_to_db('GAMES', unmade_games, debug=debug)
+        self.db_manager.df_to_db('GAMES', unmade_games, debug=debug)
 
         if not debug:
             self.future_games_checked = True
@@ -299,7 +318,7 @@ class Sports_DB_Packer:
 
             copied_odds_df = self.get_uid(copied_odds_df, 'home_serial', 'away_serial', 'Date') 
             
-            games_df = self.manager.dataframe_query('select * from GAMES')
+            games_df = self.db_manager.dataframe_query('select * from GAMES')
             games_df = self.get_uid(games_df,'HOME_TEAM_SERIAL','AWAY_TEAM_SERIAL','GAME_DATE')
                 
             # Join the team df to the current db games data using the UID 
@@ -319,7 +338,7 @@ class Sports_DB_Packer:
             
              # Retrieve game serials to query for
             game_serials: pd.Series[int] = self.combined_market_odds_df['SERIAL'].unique()   
-            existing_game_data = self.manager.dataframe_query(f"""SELECT * FROM GAME_MARKET_ODDS 
+            existing_game_data = self.db_manager.dataframe_query(f"""SELECT * FROM GAME_MARKET_ODDS 
                                                               WHERE GAME_SERIAL IN 
                                                               {tuple(str(serial) for serial in game_serials)}""")
 
@@ -388,14 +407,14 @@ class Sports_DB_Packer:
             if new_entries.empty:
                 return ("No game odds that exist have changed.")
             else:
-                self.df_to_db("GAME_MARKET_ODDS",new_entries,debug=debug)
+                self.db_manager.df_to_db("GAME_MARKET_ODDS",new_entries,debug=debug)
 
     def pack_odds_table(self, debug: bool = False) -> None:
         """Compare the most recently added game odds to what is in the api data, then
         add the data to the game_market_odds table."""
         
         # Get the most recent game date from DB
-        most_recent_game_date_has_odds: list[tuple] = self.manager.fetch_records("""
+        most_recent_game_date_has_odds: list[tuple] = self.db_manager.fetch_records("""
                         SELECT 
                             G.GAME_DATE AS GAME_DATE
                         FROM 
@@ -421,7 +440,7 @@ class Sports_DB_Packer:
         if debug:
             print(odds_to_add)
         
-        self.df_to_db('GAME_MARKET_ODDS', odds_to_add, debug=debug)
+        self.db_manager.df_to_db('GAME_MARKET_ODDS', odds_to_add, debug=debug)
     
     def full_odds_run(self):
         # Run the full odds api process and insert the records.
@@ -430,28 +449,6 @@ class Sports_DB_Packer:
         self._combine_odds_api_and_games_dfs()
         self.refresh_market_odds_table()
         self.pack_odds_table()
-
-
-    # move to dbmanager later *****
-    def df_to_db(self, table_name: str, df: pd.DataFrame, debug: bool = False):
-        f"""
-        This function is intended only to take in a df with matching cols to
-        the table to which you are inserting.
-
-        Args:
-            table_name: THe name of the table that you are trying to insert records into.
-            (table options: {self.tables})
-            df: The dataframe you are trying to send information from (make sure cols match
-            table)
-            debug: Boolean, turn on to see your query printed out. it will not yet send it
-            in until you set to False.
-        """
-        if table_name not in self.tables:
-            raise ValueError(f"""The table name you are using is not in the Sports Data DB.
-            Here are the list of tables: {self.tables}""")
-        row_tuples = [tuple(row) for row in df.itertuples(index=False, name=None)]
-    
-        self.manager.insert_table_records(table_name, records=row_tuples, debug=debug)
 
 
 # --------------------------------------- NFL DATA PACKER ---------------------------------------------
@@ -518,7 +515,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         Call the info from the teamrankings site for points per game and opponents points per game.
         """
             
-        league: str = self.manager.fetch_records(f"SELECT TR_URL_NAME FROM LEAGUES WHERE NAME = '{self.league.upper()}'", 'one')
+        league: str = self.db_manager.fetch_records(f"SELECT TR_URL_NAME FROM LEAGUES WHERE NAME = '{self.league.upper()}'", 'one')
         league = league[0][0] #unpack tuple
         ppg = pd.read_html(f"https://www.teamrankings.com/{league.lower()}/stat/points-per-game")
         oppg = pd.read_html(f"https://www.teamrankings.com/{league.lower()}/stat/opponent-points-per-game")
@@ -559,8 +556,8 @@ class NFL_Data_Packer(Sports_DB_Packer):
         ppg = self._reorder_team_data_ppg_oppg(ppg)
         oppg = self._reorder_team_data_ppg_oppg(oppg)
         # Send data into database
-        self.df_to_db('TEAM_TR_FOOTBALL_PPG', ppg, debug=debug)
-        self.df_to_db('TEAM_TR_FOOTBALL_OPPG', oppg, debug=debug)
+        self.db_manager.df_to_db('TEAM_TR_FOOTBALL_PPG', ppg, debug=debug)
+        self.db_manager.df_to_db('TEAM_TR_FOOTBALL_OPPG', oppg, debug=debug)
 
     # This section is for team games data calling and packing
 
@@ -622,7 +619,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
 
             # Get most recent game with outcome data
-            most_recent_game_w_outcome = self.manager.fetch_records("""
+            most_recent_game_w_outcome = self.db_manager.fetch_records("""
                     SELECT MAX(G.GAME_DATE)
                     FROM GAMES AS G JOIN GAME_OUTCOMES AS GO ON G.SERIAL = GO.GAME_SERIAL                      
                     """, fetchstyle='one')[0][0]
@@ -635,7 +632,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
             # Check if DataFrame is empty
             if games_data.empty:
                 print(f"{scraper.team_name} has no game updates since {most_recent_game_w_outcome}")
-                #time.sleep(10)
+                time.sleep(10)
                 continue  # Skip this team if no data matches the criteria
 
             # Add metadata
@@ -647,7 +644,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
             games_data_by_team[scraper.team_name] = games_data
             print(f"{scraper.team_name} added {len(games_data)} games since {most_recent_game_w_outcome}.")
             # Respect crawl delay
-            #time.sleep(10)
+            time.sleep(10)
 
         self.all_games_data = games_data_by_team
         self.games_data_retrieved = True
@@ -678,7 +675,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
 
         for team, df in games_table_data.items():
             df = df[['home_serial', 'away_serial', 'Date', 'League Serial']]
-            self.df_to_db('GAMES', df)
+            self.db_manager.df_to_db('GAMES', df)
 
     def pack_game_outcomes_data(self, debug: bool= False) -> None:
 
@@ -693,7 +690,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         game_outcomes_table_data = copy.deepcopy(self.all_games_data)
 
         # Call all current game data in the db
-        games_df = self.manager.dataframe_query('select * from GAMES')
+        games_df = self.db_manager.dataframe_query('select * from GAMES')
         games_df = self.get_uid(games_df,'HOME_TEAM_SERIAL','AWAY_TEAM_SERIAL','GAME_DATE')
         
         for team, df in game_outcomes_table_data.items():
@@ -709,7 +706,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
             )
             # Drop unecessary data and insert into game outcomes table
             joined_df = joined_df[['SERIAL', 'winner_serial', 'Points', 'Opp Points']]
-            self.df_to_db('GAME_OUTCOMES', joined_df, debug=debug)
+            self.db_manager.df_to_db('GAME_OUTCOMES', joined_df, debug=debug)
 
     def pack_all_games_data(self, acknowledged: bool = False) -> None:
         """Combining all funcs needed to get all the prior games and game outcomes for the

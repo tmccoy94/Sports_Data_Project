@@ -22,6 +22,7 @@ class SqliteDBManager:
         """
         self.db_name = db_name #'SportsData.db'
         self.conn = None
+        self.tables: list[str] = self.check_table_names_in_db()
 
     def connect(self):
         """Establish a connection to the database if not already connected."""
@@ -45,7 +46,7 @@ class SqliteDBManager:
         return ls
         
 
-    def check_table_info(self, table_name, help: bool = False):
+    def check_table_info(self, table_name, help: bool = False) -> str:
         """
         Check the structure of a table in the database.
 
@@ -547,4 +548,25 @@ class SqliteDBManager:
       # Execute and commit
       self.execute_query(alter_query, commit=True)
       print(f"Table '{table_name}' altered successfully with operation '{operation}'.")
+
+
+    def df_to_db(self, table_name: str, df: pd.DataFrame, debug: bool = False):
+        f"""
+        This function is intended only to take in a df with matching cols to
+        the table to which you are inserting.
+
+        Args:
+            table_name: THe name of the table that you are trying to insert records into.
+            (table options: {self.tables})
+            df: The dataframe you are trying to send information from (make sure cols match
+            table)
+            debug: Boolean, turn on to see your query printed out. it will not yet send it
+            in until you set to False.
+        """
+        if table_name not in self.tables:
+            raise ValueError(f"""The table name you are using is not in the Sports Data DB.
+            Here are the list of tables: {self.tables}""")
+        row_tuples = [tuple(row) for row in df.itertuples(index=False, name=None)]
+    
+        self.manager.insert_table_records(table_name, records=row_tuples, debug=debug)
 
