@@ -22,6 +22,7 @@ class SqliteDBManager:
         """
         self.db_name = db_name #'SportsData.db'
         self.conn = None
+        self.db_date_format: str = r"%Y-%m-%d %H:%M:%S" # for use in formatting dates on way to db
         self.tables: list[str] = self.check_table_names_in_db()
 
     def connect(self):

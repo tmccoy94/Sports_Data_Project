@@ -16,13 +16,109 @@ class Team_Games_Scraper:
     team_name: str
     tr_url_name: str
 
+    # maybe build out some funcs here that ensure that the team_name and tr_url_name exist in the db
+
 class OddsApiCallerMixin:
-    pass
+    """This class is intended to be used for calling the odds api information and returning it."""
+    def __init__(self, regions: str = 'us', markets: str = 'spreads,totals,h2h', odds_format: str = 'decimal',
+                 odds_date_format: str = 'iso', api_key: str = odds_api_key):
+        self.api_key: str = api_key
+        self.regions: str = regions
+        self.markets: str = markets
+        self.odds_format: str = odds_format
+        self.odds_date_format: str = odds_date_format
+        self.requests_remaining: int = None
+        self.requests_used: int = None
+        self.odds_called: bool = False # changed after odds api is called
+        self.documentation = 'https://the-odds-api.com/liveapi/guides/v4/'
+
+    def call_odds_api(self, sport: str, regions: str, markets: str, odds_format: str, odds_date_format: str) -> dict:
+        """
+        Call the odds api and store the response as a json.
+
+        This object has a self.documentation attr that ahs the odds api docs link in it
+        if you want to reference those docs.
+
+        Args:
+          sport (str): The sport you are using. Reference odds api docs.
+          regions (str): The regions you are using. Reference odds api docs.
+          markets (str): The markets you are using. Reference odds api docs.
+          odds_format (str): The fomat you want the odds for the games to pull in. 
+          Reference odds api docs.
+          odds_date_format(str): The format you want the odds api dates to pull in. 
+          Reference odds api docs.
+
+        Returns:
+          JSON file from odds api call. Reference odds api docs for more info.
+        """
+        odds_response = requests.get(
+            f'https://api.the-odds-api.com/v4/sports/{sport}/odds',
+            params={
+                'api_key': self.api_key,
+                'regions': regions,
+                'markets': markets,
+                'oddsFormat': odds_format,
+                'dateFormat': odds_date_format
+            }
+        )
+
+        if odds_response.status_code != 200:
+            print(f'Failed to get odds: status_code {odds_response.status_code}, response body {odds_response.text}')
+
+        else:
+            # Jsonify the results
+            odds_json = odds_response.json()
+
+            # Check the usage quota
+            self.requests_remaining = odds_response.headers['x-requests-remaining']
+            self.requests_used = odds_response.headers['x-requests-used']
+
+            self.odds_called = True
+
+            return odds_json
+        
+    def parse_market_info(self, market_name: str, market_serial: int, response_json: list[dict]) -> pd.DataFrame:
+        entries = []
+
+        for response in response_json:
+            entry = {
+                'Home_Team': response['home_team'],
+                'Away_Team': response['away_team'],
+                'Date': response['commence_time'],
+                'MARKET_SERIAL': market_serial,
+                'H2H_HOME': None, 
+                'H2H_AWAY': None, 
+                'SPREAD_HOME': None, 
+                'TOTAL': None
+            }
+
+            for bookmaker in response['bookmakers']:
+                if bookmaker['title'] == market_name:
+                    for market in bookmaker['markets']:
+                        if market['key'] == 'h2h':
+                            entry['H2H_HOME'] = market['outcomes'][0]['price']
+                            entry['H2H_AWAY'] = market['outcomes'][1]['price']
+                        elif market['key'] == 'spreads':
+                            entry['SPREAD_HOME'] = market['outcomes'][0]['point']
+                        elif market['key'] == 'totals':
+                            entry['TOTAL'] = market['outcomes'][0]['point']
+
+            entries.append(entry)
+
+            df = pd.DataFrame(entries)
+        
+            df['Date'] = pd.to_datetime(df['Date']).dt.tz_convert(LOCAL_TIMEZONE)
+            df['Date'] = df['Date'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        return df
+    
+    def show_api_requests_used(self) -> None:
+        print(f"You have used {self.requests_used} calls and have {self.requests_remaining} remaining.")  
 
 class TeamRankingsScraperMixin:
     pass
 
-class Sports_DB_Packer:
+class Sports_Odds_DB_Packer(OddsApiCallerMixin):
     """
     This is a class buit to make getting data for a sports league from teamrankings.com, and the odds api
     and packing it into an SQLite database. In this case using another class, SqliteDBManager. This should
@@ -31,33 +127,30 @@ class Sports_DB_Packer:
     This is made specifically for the SportsData db created for the sports data app, but could be easily changed.
     I have tried to write it to be as extensible as possible. 
     """
-    def __init__(self):
-        self.api_key: str = odds_api_key
-        self.regions: str = 'us'
-        self.markets: str = 'spreads,totals,h2h'
-        self.odds_format: str = 'decimal'
-        self.odds_date_format: str = 'iso'
-        self.db_date_format: str = r"%Y-%m-%d %H:%M:%S" # for use in formatting dates on way to db
+    def __init__(self, db_name):
+        """
+        Define all the object you'll need to pack the odds api information not done in the odds api mixin object.
+
+        Args:
+          db_name (str): The name of the database you want to either create or refer to 
+          with this object.
+        """
+        super().__init__()        
         self.sport: str = None # defined in sublcasses
         self.db_last_updated_date: str = None # defined in sublcasses
         self.most_recent_game_date: str = None # defined in sublcasses 
         self.league_serial: int = None # defined in sublcasses
-        self.requests_used: int = None # Requests for odds API
-        self.requests_remaining: int = None # Requests for odds API
-        self.odds_called: bool = False # change if odds api is called
         self.odds_df: pd.DataFrame = None # info pulled from odds api
         self.combined_market_odds_df: pd.DataFrame = None # Combine odds_df and games_table info
         self.future_games_checked: bool = False # check if future games have been accounted for yet
-        self.db_manager: SqliteDBManager = SqliteDBManager('SportsData.db')
-        
-         
-        self.teams_df : pd.DataFrame = self._query_teams_table()        
-        self.team_serial_ref_dict: dict[str, str] = self._build_team_serial_ref()
+        self.db_manager: SqliteDBManager = SqliteDBManager(db_name) # define the database you're calling from/to
+        self.teams_df : pd.DataFrame = self._query_teams_table() # League specified in subclasses    
+        self.team_serial_ref_dict: dict[str, str] = self._build_team_serial_ref() # League specified in subclasses
 
     def _query_last_db_updated_date(self) -> str:
         """Get date the sports db was last updated.
 
-        You can only call this function in a subclass to Sports_DB_Packer that has defined what league it is using.
+        You can only call this function in a subclass to Sports_Odds_DB_Packer that has defined what league it is using.
 
         Returns:
           date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S"""
@@ -68,7 +161,7 @@ class Sports_DB_Packer:
     def _query_most_recent_game_date(self) -> str:
         """Get date the sports db contains for a game.
 
-        You can only call this function in a subclass to Sports_DB_Packer that has defined what league it is using.
+        You can only call this function in a subclass to Sports_Odds_DB_Packer that has defined what league it is using.
 
         Returns:
           date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S"""
@@ -110,37 +203,9 @@ class Sports_DB_Packer:
     
     def insert_new_db_updated_date(self) -> None:
         """Insert a new updated date into the db after updates are done"""
-        now =  datetime.now().strftime(self.db_date_format)
+        now =  datetime.now().strftime(self.db_manager.db_date_format)
 
         self.db_manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
-    
-    def call_odds_api(self) -> dict:
-        """
-        Call the odds api and store the response as a json.
-        """
-        odds_response = requests.get(
-            f'https://api.the-odds-api.com/v4/sports/{self.sport}/odds',
-            params={
-                'api_key': self.api_key,
-                'regions': self.regions,
-                'markets': self.markets,
-                'oddsFormat': self.odds_format,
-                'dateFormat': self.odds_date_format
-            }
-        )
-
-        if odds_response.status_code != 200:
-            print(f'Failed to get odds: status_code {odds_response.status_code}, response body {odds_response.text}')
-
-        else:
-            # Jsonify the results
-            odds_json = odds_response.json()
-
-            # Check the usage quota
-            self.requests_remaining = odds_response.headers['x-requests-remaining']
-            self.requests_used = odds_response.headers['x-requests-used']
-
-            return odds_json
         
     def get_market_info(self) -> list[tuple[int,str]]:
         """Queries MARKETS table and returns a tuple for each market: (market serial, market name)"""
@@ -153,45 +218,11 @@ class Sports_DB_Packer:
             markets.append(item[1:]) #drop index from db
         
         return markets
-        
-    def parse_market_info(self, market_name: str, market_serial: int, response_json: list[dict]) -> pd.DataFrame:
-        entries = []
-
-        for response in response_json:
-            entry = {
-                'Home_Team': response['home_team'],
-                'Away_Team': response['away_team'],
-                'Date': response['commence_time'],
-                'MARKET_SERIAL': market_serial,
-                'H2H_HOME': None, 
-                'H2H_AWAY': None, 
-                'SPREAD_HOME': None, 
-                'TOTAL': None
-            }
-
-            for bookmaker in response['bookmakers']:
-                if bookmaker['title'] == market_name:
-                    for market in bookmaker['markets']:
-                        if market['key'] == 'h2h':
-                            entry['H2H_HOME'] = market['outcomes'][0]['price']
-                            entry['H2H_AWAY'] = market['outcomes'][1]['price']
-                        elif market['key'] == 'spreads':
-                            entry['SPREAD_HOME'] = market['outcomes'][0]['point']
-                        elif market['key'] == 'totals':
-                            entry['TOTAL'] = market['outcomes'][0]['point']
-
-            entries.append(entry)
-
-            df = pd.DataFrame(entries)
-        
-            df['Date'] = pd.to_datetime(df['Date']).dt.tz_convert(LOCAL_TIMEZONE)
-            df['Date'] = df['Date'].dt.strftime('%Y-%m-%d %H:%M:%S')
-
-        return df
     
     def get_odds_df(self) -> None:
         markets: list[tuple[int,str]] = self.get_market_info()
-        response_json: list[dict] = self.call_odds_api()
+        response_json: list[dict] = self.call_odds_api(self.sport, self.regions, self.markets,
+                                                       self.odds_format, self.odds_date_format)
 
         market_dfs = []
 
@@ -203,12 +234,7 @@ class Sports_DB_Packer:
         self.odds_df['home_serial'] = self.odds_df['Home_Team'].apply(self.get_team_serial)
         self.odds_df['away_serial'] = self.odds_df['Away_Team'].apply(self.get_team_serial)
         self.odds_df = self.odds_df[['Home_Team','home_serial','Away_Team', 'away_serial','MARKET_SERIAL', 'SPREAD_HOME', 
-                      'TOTAL', 'H2H_HOME', 'H2H_AWAY','Date']]
-        
-        self.odds_called = True
-
-    def show_api_requests_used(self) -> None:
-        print(f"You have used {self.requests_used} calls and have {self.requests_remaining} remaining.")    
+                      'TOTAL', 'H2H_HOME', 'H2H_AWAY','Date']]  
 
     def get_team_serial(self, team_name: str):
         return self.team_serial_ref_dict[team_name]
@@ -453,7 +479,7 @@ class Sports_DB_Packer:
 
 # --------------------------------------- NFL DATA PACKER ---------------------------------------------
 
-class NFL_Data_Packer(Sports_DB_Packer):
+class NFL_Data_Packer(Sports_Odds_DB_Packer):
     """
     This object is intended to get NFL data and send it into the Sports Data DB.
 
@@ -461,16 +487,19 @@ class NFL_Data_Packer(Sports_DB_Packer):
     odds, it has to do with the odds api.
     """
 
-    def __init__(self, debug = False):
+    def __init__(self, db_name: str, debug = False):
         """
-        Here we query the Sports DB for the league that is chosen in the data packer.
+        Here we query the Sports DB for the league that is chosen in the data packer,
+        get the odds info from the inhereted 
 
         We also get all the team data for that league and create keys for later data
         translation from the different data sources so they match db info.
 
-        We also defin
+        Args:
+          db_name (str): The name of the database you want to either create or refer to 
+          with this object.
         """
-        super().__init__()   
+        super().__init__(db_name)   
         self.debug = debug
         self.league: str = 'NFL'
         self.sport : str = self._get_sport(self.league)
@@ -590,7 +619,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         current_year = now.year
 
         # Convert Date column to include the current year and current time
-        df['Date'] = pd.to_datetime(df['Date'] + f'/{current_year} ').dt.strftime(self.db_date_format)
+        df['Date'] = pd.to_datetime(df['Date'] + f'/{current_year} ').dt.strftime(self.db_manager.db_date_format)
 
         return df
     
@@ -726,7 +755,7 @@ class NFL_Data_Packer(Sports_DB_Packer):
         """
 
         last_updated_date = self.db_last_updated_date
-        date_format = self.db_date_format
+        date_format = self.db_manager.db_date_format
 
         # Parse the last updated date
         try:
