@@ -8,8 +8,6 @@ import pytz
 import time
 import copy
 
-LOCAL_TIMEZONE = 'America/New_York'
-
 @dataclass
 class Team_Games_Scraper:
     """This dataclass is to ensure type safety for info used to scrape teams"""
@@ -67,7 +65,7 @@ class OddsApiCallerMixin:
         self.requests_used: int = None
         self.odds_called: bool = False # changed after odds api is called
         self.sport: str = None # defined in subclasses
-        self.documentation = 'https://the-odds-api.com/liveapi/guides/v4/'
+        self.odds_api_documentation = 'https://the-odds-api.com/liveapi/guides/v4/'
 
     def call_odds_api(self, retries: int = 3, delay: int = 5) -> dict:
         """
@@ -142,7 +140,7 @@ class OddsApiCallerMixin:
 
             df = pd.DataFrame(entries)
         
-            df['Date'] = pd.to_datetime(df['Date']).dt.tz_convert(LOCAL_TIMEZONE)
+            df['Date'] = pd.to_datetime(df['Date']).dt.tz_convert(self.time_zone)
             df['Date'] = df['Date'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
         return df
@@ -995,6 +993,9 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
             self.full_odds_run()
             # Check if it's a new week yet and get game outcomes data if so.
             self.pack_own_odds_predictions()
+            # Push new odds predictions into the db
+            self.pack_own_odds_predictions()
+            # Push new game outcomes data into db if it's a new week
             if self.is_new_week():
                 print("Fetching game outcomes data.")
                 self.pack_game_outcomes_data()

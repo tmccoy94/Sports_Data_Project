@@ -18,7 +18,7 @@ class SqliteDBManager:
     """
     def __init__(self, db_name):
         """
-        Initialize the SportsDBManager with a default database name.
+        Initialize the SqliteDBManager with a database name.
         """
         self.db_name = db_name #'SportsData.db'
         self.conn = None
@@ -200,7 +200,8 @@ class SqliteDBManager:
             self.create_table('TEAMS', [
                 ('SERIAL', 'INTEGER', 'PRIMARY KEY'),
                 ('LEAGUE_SERIAL', 'INTEGER', 'REFERENCES LEAGUES(SERIAL)'),
-                ('TEAM_NAME', 'TEXT')
+                ('TEAM_NAME', 'TEXT'),
+                ('UPDATED_DATE', 'TIMESTAMP')
             ], debug=True)
         """
         if not columns:
@@ -214,14 +215,15 @@ class SqliteDBManager:
         # Build the column definitions from the list of tuples
         column_defs = []
         for col in columns:
-            if 'TIMESTAMP' in col:
-                column_defs.append(col)
-                continue
             col_def = f"{col[0]} {col[1]}"
+            # Handle timestamp columns
+            if col[1] == 'TIMESTAMP':
+                col_def += " DEFAULT CURRENT_TIMESTAMP" # Finish time stamp statement
+            # Handle constraint columns
             if len(col) == 3:
                 constraint = col[2].upper()
                 if constraint == "PRIMARY KEY":
-                    col_def += " PRIMARY KEY"
+                    col_def += " PRIMARY KEY" # Add necessary space
                 elif "REFERENCES" in constraint:
                     col_def += f" {constraint}"  # Use the full foreign key constraint as is
             column_defs.append(col_def)
