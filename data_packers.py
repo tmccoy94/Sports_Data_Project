@@ -18,6 +18,33 @@ class Team_Games_Scraper:
 
     # maybe build out some funcs here that ensure that the team_name and tr_url_name exist in the db
 
+@dataclass
+class GameOwnOddsRow:
+    game_serial: int
+    predicted_home_points: float
+    predicted_away_points: float
+
+    @property
+    def spread(self) -> float:
+        return round(self.predicted_home_points - self.predicted_away_points,2)
+    
+    @property
+    def total(self) -> float:
+        return round(self.predicted_home_points + self.predicted_away_points,2)
+    
+    def to_dict(self):
+        """
+        Convert the values in the object to a dictionary, and enforce type security
+        for the database
+        """
+        return {
+            "game_serial": self.game_serial,
+            "predicted_home_points": float(self.predicted_home_points),
+            "predicted_away_points": float(self.predicted_away_points),
+            "spread": float(self.spread),
+            "total": float(self.total),
+        }
+
 class OddsApiCallerMixin:
     """This class is intended to be used for calling the odds api information and returning it.
     Args:
@@ -651,6 +678,38 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         self.db_manager.df_to_db('TEAM_TR_FOOTBALL_PPG', ppg, debug=debug)
         self.db_manager.df_to_db('TEAM_TR_FOOTBALL_OPPG', oppg, debug=debug)
 
+    # This section is for making our own predictions
+    def get_team_ppg_data(self):
+        return self.db_manager.dataframe_query(
+        f"""
+        SELECT
+            TEAMS.SERIAL,
+            PPG.THIS_YEAR_PPG AS PPG_2024,
+            OPPG.THIS_YEAR_PPG AS OPPG_2024,
+            PPG.LAST_3 AS PPG_LAST_3,
+            OPPG.LAST_3 AS OPPG_LAST_3,
+            PPG.HOME AS PPG_HOME,
+            OPPG.HOME AS OPPG_HOME,
+            PPG.AWAY AS PPG_AWAY,
+            OPPG.AWAY AS OPPG_AWAY
+        FROM
+            TEAMS AS TEAMS
+            JOIN TEAM_TR_FOOTBALL_PPG AS PPG ON TEAMS.SERIAL = PPG.TEAM_SERIAL
+            JOIN TEAM_TR_FOOTBALL_OPPG AS OPPG ON TEAMS.SERIAL = OPPG.TEAM_SERIAL
+        WHERE
+            TEAMS.LEAGUE_SERIAL = {self.league_serial} AND
+            PPG.UPDATED_DATE = (SELECT MAX(UPDATED_DATE) FROM TEAM_TR_FOOTBALL_PPG)
+            AND OPPG.UPDATED_DATE = (SELECT MAX(UPDATED_DATE) FROM TEAM_TR_FOOTBALL_OPPG)
+        ORDER BY
+            TEAMS.TEAM_NAME
+        """)
+
+    def pack_own_odds_predictions(self) -> None:
+        """
+        This will be a function that packs the own_odds table for each team in games
+        upcoming.
+        """
+        pass
     # This section is for team games data calling and packing
 
     def build_scrapers(self) -> list[Team_Games_Scraper]:
@@ -813,13 +872,6 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         self.pack_games_data(acknowledged=acknowledged)
         self.pack_game_outcomes_data()
     # Put it all together
-
-    def pack_own_odds_predictions(self) -> None:
-        """
-        This will be a function that packs the own_odds table for each team in games
-        upcoming.
-        """
-        pass
 
     def full_pack(self, pack_all_games_data: bool = False, acknowledged: bool = False) -> None:
         f"""This func is designed to run a standard data gathering for the {self.league}.
