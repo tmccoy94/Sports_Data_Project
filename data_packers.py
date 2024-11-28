@@ -633,12 +633,13 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
           with this object.
         """
         super().__init__(db_name)   
-        self.debug = debug
+        self.debug: bool = debug
         self.league: str = league_name
         self.sport : str = self._get_sport(self.league)
         self.league_serial: int = self._get_league_serial(self.league)        
         self.db_last_updated_date: str = self._query_last_db_updated_date()
         self.most_recent_game_date: str = self._query_most_recent_game_date() 
+        self.team_ppg_data: pd.DataFrame = None
         self.odds_df: pd.DataFrame = None
         self.all_games_data: dict[str,pd.DataFrame] = None
         self.games_data_retrieved: bool = False
@@ -678,9 +679,10 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         self.db_manager.df_to_db('TEAM_TR_FOOTBALL_PPG', ppg, debug=debug)
         self.db_manager.df_to_db('TEAM_TR_FOOTBALL_OPPG', oppg, debug=debug)
 
-    # This section is for making our own predictions
+    # This section is for making our own predictions ---------
+
     def get_team_ppg_data(self):
-        return self.db_manager.dataframe_query(
+        self.team_ppg_data = self.db_manager.dataframe_query(
         f"""
         SELECT
             TEAMS.SERIAL,
@@ -703,14 +705,106 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         ORDER BY
             TEAMS.TEAM_NAME
         """)
+    
+    def get_weighted_average(self,stats, weights):
+        """Calculate a weighted average."""
+        return sum(stat * weight for stat, weight in zip(stats, weights))
 
-    def pack_own_odds_predictions(self) -> None:
+    def get_predicted_scores(self,home_serial: int = None, away_serial: int = None) -> list[float, float]:
+        """
+        Using the serials of two teams, get predicted scores for each team.
+        ORDER MATTERS.
+
+        Kwargs:
+        home_serial (int): The serial of the home team.
+        away_serial (int): the serial of the away team.
+
+        Returns:
+        A list with two floats that have the values: [home_prediction,away_prediction].
+        """
+        if not hasattr(self, 'team_ppg_data'):
+            try:
+                self.get_team_ppg_data()
+            except Exception as e:
+                raise AttributeError(f"You weren't able to retrieve the necessary self.team_ppg_data attr.\n {e}")
+        team_ppg_data = self.team_ppg_data
+        # Pre-filter the DataFrame for both teams
+        filtered_data = team_ppg_data[team_ppg_data['SERIAL'].isin([away_serial, home_serial])]
+
+        # Ensure data for both teams is found
+        if filtered_data.shape[0] != 2:
+            raise ValueError("One or both team SERIALs not found in the data.")
+
+        # Split into home and away records
+        away_record = filtered_data[filtered_data['SERIAL'] == away_serial].iloc[0]
+        home_record = filtered_data[filtered_data['SERIAL'] == home_serial].iloc[0]
+
+        # Define stats and weights
+        away_stats = [away_record.PPG_2024, home_record.OPPG_2024, away_record.PPG_AWAY,
+                    home_record.OPPG_HOME, away_record.PPG_LAST_3, home_record.OPPG_LAST_3]
+        home_stats = [home_record.PPG_2024, away_record.OPPG_2024, home_record.PPG_HOME,
+                    away_record.OPPG_AWAY, home_record.PPG_LAST_3, away_record.OPPG_LAST_3]
+        weights = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2]
+
+        # Calculate weighted averages
+        away_team_score_prediction = round(self.get_weighted_average(away_stats, weights),2)
+        home_team_score_prediction = round(self.get_weighted_average(home_stats, weights),2)
+
+        return [home_team_score_prediction, away_team_score_prediction]
+        
+    def get_predictions_for_games(self) -> list[tuple]:
+        games_get_odds = self.db_manager.dataframe_query(
+        f"""
+        SELECT *
+        FROM GAMES
+        WHERE 
+        LEAGUE_SERIAL = {self.league_serial} AND
+        GAME_DATE > '{datetime.now().strftime(self.db_manager.db_date_format)}'
+        """)
+
+        if games_get_odds.empty:
+            print("No games to get odds for today.")
+            return None
+        
+        self.get_team_ppg_data()
+        game_own_odds_rows = []
+
+        for row in games_get_odds.itertuples():
+            predicted_home_points, predicted_away_points = self.get_predicted_scores(home_serial=row.HOME_TEAM_SERIAL,
+                                                                                away_serial=row.AWAY_TEAM_SERIAL)
+            
+            game_own_odds_rows.append(GameOwnOddsRow(row.SERIAL, predicted_home_points, predicted_away_points))
+
+        rows_as_tuples = [tuple(row.to_dict().values()) for row in game_own_odds_rows]
+
+        return rows_as_tuples
+
+    def pack_own_odds_predictions(self, debug: bool = False) -> None:
         """
         This will be a function that packs the own_odds table for each team in games
         upcoming.
         """
-        pass
-    # This section is for team games data calling and packing
+        # Get tuples to pack into db
+        game_own_odds_tuples: list[tuple] = self.get_predictions_for_games()
+        # Stop function if no results returned.
+        if len(game_own_odds_tuples) == 0:
+            return None
+        
+        # Get all odds in the current table
+        current_own_odds: pd.DataFrame = self.db_manager.dataframe_query("select * from GAME_OWN_ODDS")
+        if not current_own_odds.empty:
+            current_own_odds = current_own_odds.drop(['SERIAL', 'UPDATED_DATE'], axis= 1)
+            # Pack into storage for later retrieval
+            self.db_manager.df_to_db('STORED_GAME_OWN_ODDS', current_own_odds)
+            # Clear game own odds table for new odds incoming
+            self.db_manager.truncate_table('GAME_OWN_ODDS', debug=debug)
+
+        # Pack new odds into the db
+        self.db_manager.insert_table_records('GAME_OWN_ODDS', game_own_odds_tuples,
+                                             debug=debug)
+        print("Successfully packed game_own_odds_table")
+
+    # This section is for team games data calling and packing -------------
 
     def build_scrapers(self) -> list[Team_Games_Scraper]:
         """Create scrapers for each team in the chosen league"""

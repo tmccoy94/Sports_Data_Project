@@ -59,7 +59,7 @@ class SqliteDBManager:
                 print("The tuples in the result mean the  following:\ncolumn_id: 0 for first column, 1 for second column, etc.\nname: Column name\ndata_type: Data type of the column\nnotnull: 0 for can be NULL, 1 for cannot be NULL\ndefault_value: None for no default value\nprimary_key: 1 if this column is part of the primary key, 0 otherwise\nhidden: 0 for visible, 1 for hidden")
         
         cols = []
-        for col in self.fetch_records(f"PRAGMA table_xinfo({table_name})"):
+        for col in self.fetch_records(f"PRAGMA table_xinfo({table_name})", fetchstyle='all'):
             cols.append(col)
 
         return cols
