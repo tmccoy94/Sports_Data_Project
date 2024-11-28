@@ -803,15 +803,23 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         print(f"Game outcomes data added, added {len(joined_df)} records.")
 
     def pack_all_games_data(self, acknowledged: bool = False) -> None:
-        """Combining all funcs needed to get all the prior games and game outcomes for the
+        """
+        Combining all funcs needed to get all the prior games and game outcomes for the
         entire season. This shouldn't be called every time.
         Args:
-            acknowledged (bool): Understand the risks of doubling the data"""                
+            acknowledged (bool): Acknowledge your understanding of the risks of doubling 
+            the data
+        """                
         self.pack_games_data(acknowledged=acknowledged)
         self.pack_game_outcomes_data()
     # Put it all together
 
-    
+    def pack_own_odds_predictions(self) -> None:
+        """
+        This will be a function that packs the own_odds table for each team in games
+        upcoming.
+        """
+        pass
 
     def full_pack(self, pack_all_games_data: bool = False, acknowledged: bool = False) -> None:
         f"""This func is designed to run a standard data gathering for the {self.league}.
@@ -840,6 +848,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
             print("Fetching odds data")   
             self.full_odds_run()
             # Check if it's a new week yet and get game outcomes data if so.
+            self.pack_own_odds_predictions()
             if self.is_new_week():
                 print("Fetching game outcomes data.")
                 self.pack_game_outcomes_data()
