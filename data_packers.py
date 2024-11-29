@@ -24,7 +24,7 @@ class GameOwnOddsRow:
 
     @property
     def spread(self) -> float:
-        return round(self.predicted_home_points - self.predicted_away_points,2)
+        return round(self.predicted_away_points- self.predicted_home_points,2)
     
     @property
     def total(self) -> float:
@@ -36,11 +36,11 @@ class GameOwnOddsRow:
         for the database
         """
         return {
-            "game_serial": self.game_serial,
-            "spread": float(self.spread),
-            "total": float(self.total),
+            "game_serial": self.game_serial,            
             "predicted_home_points": float(self.predicted_home_points),
-            "predicted_away_points": float(self.predicted_away_points)            
+            "predicted_away_points": float(self.predicted_away_points), 
+            "spread": float(self.spread),
+            "total": float(self.total),          
         }
 
 class OddsApiCallerMixin:
@@ -1000,8 +1000,6 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         if not pack_all_games_data:
             print("Fetching odds data")   
             self.full_odds_run()
-            # Check if it's a new week yet and get game outcomes data if so.
-            self.pack_own_odds_predictions()
             # Push new odds predictions into the db
             self.pack_own_odds_predictions()
             # Push new game outcomes data into db if it's a new week
@@ -1016,6 +1014,8 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
             self.pack_all_games_data(acknowledged=acknowledged)
             print("Fetching odds data")          
             self.full_odds_run()
+            print("packing odds predictions")
+            self.pack_own_odds_predictions()
                 
 
         self.insert_new_db_updated_date() # Insert new updated record into the db
