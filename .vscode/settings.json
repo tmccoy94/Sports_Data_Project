@@ -6,8 +6,6 @@
     "[python]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "charliermarsh.ruff"
-  },
-    "workbench.colorCustomizations": {
-    "notebook.cellBorderColor": "#ff0000", // Change cell border color
+  }
 }
 }
