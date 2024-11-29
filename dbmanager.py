@@ -16,13 +16,16 @@ class SqliteDBManager:
 
     All basic error handling is included through the use of these funcs.
     """
+
     def __init__(self, db_name):
         """
         Initialize the SqliteDBManager with a database name.
         """
-        self.db_name = db_name #'SportsData.db'
+        self.db_name = db_name  #'SportsData.db'
         self.conn = None
-        self.db_date_format: str = r"%Y-%m-%d %H:%M:%S" # for use in formatting dates on way to db
+        self.db_date_format: str = (
+            r"%Y-%m-%d %H:%M:%S"  # for use in formatting dates on way to db
+        )
         self.tables: list[str] = self.check_table_names_in_db()
 
     def connect(self):
@@ -40,12 +43,11 @@ class SqliteDBManager:
     def check_table_names_in_db(self) -> list[str]:
         """Check for tables in the database."""
         stmt = "SELECT name FROM sqlite_master WHERE type='table';"
-        result =self.fetch_records(stmt, fetchstyle='all')
+        result = self.fetch_records(stmt, fetchstyle="all")
         ls = []
         for name in result:
             ls.append(name[0])
         return ls
-        
 
     def check_table_info(self, table_name, help: bool = False) -> str:
         """
@@ -56,16 +58,32 @@ class SqliteDBManager:
             help (bool): If True, print help information.
         """
         if help:
-                print("The tuples in the result mean the  following:\ncolumn_id: 0 for first column, 1 for second column, etc.\nname: Column name\ndata_type: Data type of the column\nnotnull: 0 for can be NULL, 1 for cannot be NULL\ndefault_value: None for no default value\nprimary_key: 1 if this column is part of the primary key, 0 otherwise\nhidden: 0 for visible, 1 for hidden")
-        
+            print(
+                """
+                The tuples in the result mean the  following:
+                column_id: 0 for first column, 1 for second column, etc.
+                name: Column name
+                data_type: Data type of the column
+                notnull: 0 for can be NULL, 1 for cannot be NULL
+                default_value: None for no default value
+                primary_key: 1 if this column is part of the primary key, 0 otherwise
+                hidden: 0 for visible, 1 for hidden
+                """
+            )
+
         cols = []
-        for col in self.fetch_records(f"PRAGMA table_xinfo({table_name})", fetchstyle='all'):
+        for col in self.fetch_records(
+            f"PRAGMA table_xinfo({table_name})", fetchstyle="all"
+        ):
             cols.append(col)
 
         return cols
 
-
-    def read_query(self, query: str, params: tuple = None, ) -> None:
+    def read_query(
+        self,
+        query: str,
+        params: tuple = None,
+    ) -> None:
         """
         Execute a database query with error handling.
 
@@ -89,7 +107,9 @@ class SqliteDBManager:
         finally:
             self.close()
 
-    def execute_query(self, query: str, params: tuple = None, commit: bool = False) -> None:
+    def execute_query(
+        self, query: str, params: tuple = None, commit: bool = False
+    ) -> None:
         """
         Execute a database query with error handling.
 
@@ -113,7 +133,9 @@ class SqliteDBManager:
         finally:
             self.close()
 
-    def fetch_records(self, query: str, fetchstyle: str, size: int = None) -> list[tuple]:
+    def fetch_records(
+        self, query: str, fetchstyle: str, size: int = None
+    ) -> list[tuple]:
         """
         Fetch records from the database based on the specified retrieval style.
 
@@ -134,9 +156,9 @@ class SqliteDBManager:
         # Validate inputs
         if not isinstance(query, str):
             raise TypeError("query must be a string")
-        if fetchstyle not in ('one', 'many', 'all'):
+        if fetchstyle not in ("one", "many", "all"):
             raise ValueError("fetchstyle must be 'one', 'many', or 'all'")
-        if fetchstyle == 'many' and size == None:
+        if fetchstyle == "many" and size is None:
             raise ValueError("Using fetchmany() you must specify the number of rows.")
         if size and not isinstance(size, int):
             raise TypeError("Size must be an integer")
@@ -148,10 +170,10 @@ class SqliteDBManager:
             cursor.execute(query)
 
             # Fetch results based on the specified fetch style
-            if fetchstyle == 'one':
+            if fetchstyle == "one":
                 result = cursor.fetchone()
                 return [result] if result else []
-            elif fetchstyle == 'many':
+            elif fetchstyle == "many":
                 result = cursor.fetchmany(size)
                 return result if result else []
             else:  # 'all'
@@ -165,7 +187,6 @@ class SqliteDBManager:
         finally:
             # Ensure the database connection is closed
             self.close()
-
 
     def dataframe_query(self, query: str) -> pd.DataFrame:
         """
@@ -184,15 +205,19 @@ class SqliteDBManager:
         finally:
             self.close()
 
-    def create_table(self, table_name: str, columns: list[tuple] = [], debug: bool = False) -> None:
+    def create_table(
+        self, table_name: str, columns: list[tuple] = [], debug: bool = False
+    ) -> None:
         """
-        Create a table with the specified name and columns, including support for foreign keys.
+        Create a table with the specified name and columns, including support 
+        for foreign keys.
 
         Args:
             table_name (str): Name of the table.
-            columns (list of tuples): Each tuple should contain (column name, data type, additional_constraint).
-                                    additional_constraint can be 'PRIMARY KEY' or a foreign key definition 
-                                    like ('LEAGUE_SERIAL', 'INTEGER', 'REFERENCES LEAGUES(SERIAL)').
+            columns (list of tuples): Each tuple should contain 
+                (column name, data type, additional_constraint).
+                additional_constraint can be 'PRIMARY KEY' or a foreign key definition
+                like ('LEAGUE_SERIAL', 'INTEGER', 'REFERENCES LEAGUES(SERIAL)').
             debug (bool): If True, print debug information.
 
         Example usage:
@@ -205,353 +230,406 @@ class SqliteDBManager:
             ], debug=True)
         """
         if not columns:
-          raise TypeError("columns must be a non-empty list")
+            raise TypeError("columns must be a non-empty list")
         if not isinstance(columns[0], tuple):
-          raise TypeError("columns must be a list of tuples")
+            raise TypeError("columns must be a list of tuples")
         if not isinstance(table_name, str):
-          raise TypeError("table_name must be a string")
+            raise TypeError("table_name must be a string")
         if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
+            raise TypeError("debug must be a boolean")
         # Build the column definitions from the list of tuples
         column_defs = []
         for col in columns:
             col_def = f"{col[0]} {col[1]}"
             # Handle timestamp columns
-            if col[1] == 'TIMESTAMP':
-                col_def += " DEFAULT CURRENT_TIMESTAMP" # Finish time stamp statement
+            if col[1] == "TIMESTAMP":
+                col_def += " DEFAULT CURRENT_TIMESTAMP"  # Finish time stamp statement
             # Handle constraint columns
             if len(col) == 3:
                 constraint = col[2].upper()
                 if constraint == "PRIMARY KEY":
-                    col_def += " PRIMARY KEY" # Add necessary space
+                    col_def += " PRIMARY KEY"  # Add necessary space
                 elif "REFERENCES" in constraint:
-                    col_def += f" {constraint}"  # Use the full foreign key constraint as is
+                    col_def += (
+                        f" {constraint}"  # Use the full foreign key constraint as is
+                    )
             column_defs.append(col_def)
 
-        create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(column_defs)})"
+        create_table_query = (
+            f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(column_defs)})"
+        )
         # Debug mode check
         if debug:
             print(f"create_table_query: {create_table_query}")
-            return ("Run without debug to commit")
+            return "Run without debug to commit"
 
         # Execute the create table query
         self.execute_query(create_table_query, commit=True)
         print(f"Table '{table_name}' created successfully.")
 
-    def insert_table_records(self, table_name: str, records: list[tuple] = [], debug: bool = False) -> None:
-      """
-      Insert multiple records into a table.
+    def insert_table_records(
+        self, table_name: str, records: list[tuple] = [], debug: bool = False
+    ) -> None:
+        """
+        Insert multiple records into a table.
 
-      Args:
-          table_name (str): Name of the table.
-          records (list of tuples): Each tuple represents a record to be inserted.
-          debug (bool): If True, print debug information.
-      """
-      # Check all basic issues with function inputs
-      if not records:
-        raise TypeError("records must be a non-empty list")
-      if not isinstance(records[0], tuple):
-        raise TypeError("records must be a list of tuples")
-      if not isinstance(table_name, str):
-        raise TypeError("table_name must be a string")
-      if not isinstance(debug, bool):
-        raise TypeError("debug must be a boolean")
+        Args:
+            table_name (str): Name of the table.
+            records (list of tuples): Each tuple represents a record to be inserted.
+            debug (bool): If True, print debug information.
+        """
+        # Check all basic issues with function inputs
+        if not records:
+            raise TypeError("records must be a non-empty list")
+        if not isinstance(records[0], tuple):
+            raise TypeError("records must be a list of tuples")
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string")
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
 
-      try:
-        # connect to db
-        self.connect()
-        cur = self.conn.cursor()
-        # get column names of table
-        cur.execute(f"PRAGMA table_xinfo({table_name})")
-        # Get columns, remove any primary keys or timestamps (they autofill the vals)
-        columns = [row[1] for row in cur.fetchall() if row[2] != 'TIMESTAMP' and row[5] != 1]
-        # check if number of columns in table matches number of columns in records
-        if len(columns) != len(records[0]):
-          raise ValueError("Number of columns in table and length of the first record tuple do not match")
-        column_names = f"{', '.join(columns)}"
-        marks = ', '.join(['?'] * len(columns))
-        # write query
-        insert_query = f"""INSERT INTO {table_name} ({column_names})
+        try:
+            # connect to db
+            self.connect()
+            cur = self.conn.cursor()
+            # get column names of table
+            cur.execute(f"PRAGMA table_xinfo({table_name})")
+            # Get columns, remove any primary keys or timestamps (they autofill the vals)
+            columns = [
+                row[1]
+                for row in cur.fetchall()
+                if row[2] != "TIMESTAMP" and row[5] != 1
+            ]
+            # check if number of columns in table matches number of columns in records
+            if len(columns) != len(records[0]):
+                raise ValueError(
+                    "Number of columns in table and length of the first record tuple do not match"
+                )
+            column_names = f"{', '.join(columns)}"
+            marks = ", ".join(["?"] * len(columns))
+            # write query
+            insert_query = f"""INSERT INTO {table_name} ({column_names})
         VALUES ({marks})
         """
-        if debug:
-          print(f"""insert query: {insert_query}
+            if debug:
+                print(f"""insert query: {insert_query}
           1st record: {records[0]}
           """)
-          return ("Run without debug to commit")
-        # execute & commit
-        cur.executemany(insert_query,records)
-        self.conn.commit()
-        print(f"Records inserted successfully into {table_name}")
-      except sqlite3.Error as e:
-        print(f"Database error: {e}")
-      except TypeError as e:
-        print(f"Type error test: {e}")
-      finally:
-        self.close()
+                return "Run without debug to commit"
+            # execute & commit
+            cur.executemany(insert_query, records)
+            self.conn.commit()
+            print(f"Records inserted successfully into {table_name}")
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+        except TypeError as e:
+            print(f"Type error test: {e}")
+        finally:
+            self.close()
 
-    def update_table_records(self, table_name: str, values_to_update: dict, conditions: dict, debug: bool = False) -> None:
-      """
-      Update selected records in a table based on conditions.
+    def update_table_records(
+        self,
+        table_name: str,
+        values_to_update: dict,
+        conditions: dict,
+        debug: bool = False,
+    ) -> None | str:
+        """
+        Update selected records in a table based on conditions.
 
-      Args:
-          table_name (str): Name of the table.
-          values_to_update (dict): Dictionary of columns and values to update.
-          conditions (dict): Dictionary of columns and values to match for selecting records to update.
-          debug (bool): If True, print debug information.
+        Args:
+            table_name (str): Name of the table.
+            values_to_update (dict): Dictionary of columns and values to update.
+            conditions (dict): Dictionary of columns and values to match for selecting records to update.
+            debug (bool): If True, print debug information.
 
-      Example of updating records
-        values_to_update = {'TEAM_NAME': 'New Team Name', 'SPORT': 'Basketball'}
-        conditions = {'SERIAL': 1}
+        Example of updating records
+          values_to_update = {'TEAM_NAME': 'New Team Name', 'SPORT': 'Basketball'}
+          conditions = {'SERIAL': 1}
 
-      Run the update
-        self.update_table_records('TEAMS', values_to_update, conditions, debug=False)
-      """
-      # Validate inputs
-      if not values_to_update:
-          raise ValueError("values_to_update must be a non-empty dictionary")
-      if not conditions:
-          raise ValueError("conditions must be a non-empty dictionary")
-      if not isinstance(table_name, str):
-          raise TypeError("table_name must be a string")
-      if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
-      # Construct the SET part of the SQL statement
-      set_clause = ', '.join([f"{col} = ?" for col in values_to_update.keys()])
-      set_values = list(values_to_update.values())
+        Run the update
+          self.update_table_records('TEAMS', values_to_update, conditions, debug=False)
+        """
+        # Validate inputs
+        if not values_to_update:
+            raise ValueError("values_to_update must be a non-empty dictionary")
+        if not conditions:
+            raise ValueError("conditions must be a non-empty dictionary")
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string")
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
+        # Construct the SET part of the SQL statement
+        set_clause = ", ".join([f"{col} = ?" for col in values_to_update.keys()])
+        set_values = list(values_to_update.values())
 
         # Construct the WHERE part
-      where_clause = ' AND '.join(
-            [f"{col} {cond}" if cond in ["IS NULL", "IS NOT NULL"] else f"{col} = ?" 
-            for col, cond in conditions.items()]
+        where_clause = " AND ".join(
+            [
+                f"{col} {cond}" if cond in ["IS NULL", "IS NOT NULL"] else f"{col} = ?"
+                for col, cond in conditions.items()
+            ]
         )
-      where_values = [val for val in conditions.values() if val not in ["IS NULL", "IS NOT NULL"]]
+        where_values = [
+            val for val in conditions.values() if val not in ["IS NULL", "IS NOT NULL"]
+        ]
 
         # Combine SET and WHERE parts into full query
-      query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
-      values = set_values + where_values
+        query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+        values = set_values + where_values
 
-      # Debug print
-      if debug:
-          print(f"Update query: {query}")
-          print(f"Query parameters: {values}")
-          return "Run without debug to commit the changes."
+        # Debug print
+        if debug:
+            print(f"Update query: {query}")
+            print(f"Query parameters: {values}")
+            return "Run without debug to commit the changes."
 
-      # Execute and commit
-      
-      self.execute_query(query,values,commit=True)
-      print("Records updated successfully.")
+        # Execute and commit
 
-    def delete_table_records(self, table_name: str, conditions: dict, debug: bool = False) -> None:
-      """
-      Delete selected records from a table based on conditions.
+        self.execute_query(query, values, commit=True)
+        print("Records updated successfully.")
 
-      Args:
-          table_name (str): Name of the table.
-          conditions (dict): Dictionary of columns and values to match for selecting records to delete.
-          debug (bool): If True, print debug information.
+    def delete_table_records(
+        self, table_name: str, conditions: dict, debug: bool = False
+    ) -> None | str:
+        """
+        Delete selected records from a table based on conditions.
 
-      Example of deleting records
-        conditions = {'SERIAL': 1, 'TEAM_NAME': 'Old Team Name'}
+        Args:
+            table_name (str): Name of the table.
+            conditions (dict): Dictionary of columns and values to match for selecting records to delete.
+            debug (bool): If True, print debug information.
 
-      Run the delete
-        self.delete_table_records('TEAMS', conditions, debug=True)
-      """
-      # Validate inputs
-      if not conditions:
-          raise ValueError("conditions must be a non-empty dictionary")
-      if not isinstance(table_name, str):
-          raise TypeError("table_name must be a string")
-      if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
+        Example of deleting records
+          conditions = {'SERIAL': 1, 'TEAM_NAME': 'Old Team Name'}
 
-      
-      # Prepare the delete query
-      where_clause = ' AND '.join([f"{col} = ?" for col in conditions.keys()])
-      delete_query = f"DELETE FROM {table_name} WHERE {where_clause}"
-      
-      # Collect condition values for the query
-      query_params = tuple(conditions.values())
+        Run the delete
+          self.delete_table_records('TEAMS', conditions, debug=True)
+        """
+        # Validate inputs
+        if not conditions:
+            raise ValueError("conditions must be a non-empty dictionary")
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string")
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
 
-      # Debug print
-      if debug:
-          print(f"Delete query: {delete_query}")
-          print(f"Query parameters: {query_params}")
-          return "Run without debug to commit the changes."
+        # Prepare the delete query
+        where_clause = " AND ".join([f"{col} = ?" for col in conditions.keys()])
+        delete_query = f"DELETE FROM {table_name} WHERE {where_clause}"
 
-      # Execute and commit
-      self.execute_query(delete_query,query_params,commit=True)
-      print("Records deleted successfully.")
+        # Collect condition values for the query
+        query_params = tuple(conditions.values())
 
-    def truncate_table(self, table_name: str, debug: bool = False) -> None:
-      """
-      Remove all records from a table, effectively resetting it.
+        # Debug print
+        if debug:
+            print(f"Delete query: {delete_query}")
+            print(f"Query parameters: {query_params}")
+            return "Run without debug to commit the changes."
 
-      Args:
-          table_name (str): Name of the table to truncate.
-          debug (bool): If True, print debug information without executing.
+        # Execute and commit
+        self.execute_query(delete_query, query_params, commit=True)
+        print("Records deleted successfully.")
 
-      Example usage:
-        To truncate the TEAMS table:
-            self.truncate_table('TEAMS', debug=True)
-      """
-      # Validate inputs
-      if not isinstance(table_name, str):
-          raise TypeError("table_name must be a string")
-      if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
+    def truncate_table(self, table_name: str, debug: bool = False) -> None | str:
+        """
+        Remove all records from a table, effectively resetting it.
 
-      # Prepare the truncate query (equivalent to TRUNCATE)
-      truncate_query = f"DELETE FROM {table_name}"
+        Args:
+            table_name (str): Name of the table to truncate.
+            debug (bool): If True, print debug information without executing.
 
-      # Debug print
-      if debug:
-          print(f"Truncate query: {truncate_query}")
-          return "Run without debug to commit the changes."
+        Example usage:
+          To truncate the TEAMS table:
+              self.truncate_table('TEAMS', debug=True)
+        """
+        # Validate inputs
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string")
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
 
-      # Execute and commit
-      self.execute_query(truncate_query, commit=True)
-      print(f"Table '{table_name}' truncated successfully.")
+        # Prepare the truncate query (equivalent to TRUNCATE)
+        truncate_query = f"DELETE FROM {table_name}"
 
-    def copy_table(self, new_table_name: str, old_table_name: str, debug: bool = False) -> None:
-      """
-      Copy records from one table into another new table, with optional alterations
+        # Debug print
+        if debug:
+            print(f"Truncate query: {truncate_query}")
+            return "Run without debug to commit the changes."
 
-      Args:
-          new_table_name (str): Name of the new table to reference.
-          old_table_name (str): Name of the old table to reference.
-          debug (bool): If True, print debug information without executing.
+        # Execute and commit
+        self.execute_query(truncate_query, commit=True)
+        print(f"Table '{table_name}' truncated successfully.")
 
-      Example usage:
-        To truncate the TEAMS table:
-            self.truncate_table('TEAMS', debug=True)
-      """
-      # Validate inputs
-      if not isinstance(new_table_name, str):
-          raise TypeError("new_table_name must be a string")
-      if not isinstance(old_table_name, str):
-          raise TypeError("old_table_name must be a string")
-      if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
-      
-      old_table_info = self.fetch_records(F"PRAGMA table_xinfo({old_table_name})",fetchstyle='all')
-      new_table_info = self.fetch_records(F"PRAGMA table_xinfo({new_table_name})",fetchstyle='all')
+    def copy_table(
+        self, new_table_name: str, old_table_name: str, debug: bool = False
+    ) -> None | str:
+        """
+        Copy records from one table into another new table, with optional alterations
 
-      old_table_cols = [row[1] for row in old_table_info]
-      new_table_cols = [row[1] for row in new_table_info]
+        Args:
+            new_table_name (str): Name of the new table to reference.
+            old_table_name (str): Name of the old table to reference.
+            debug (bool): If True, print debug information without executing.
 
-      if old_table_cols != new_table_cols:
-          raise ValueError(f"The columns from {old_table_name} and {new_table_name} do not match.")
-      
-      cols_for_query = ', '.join(old_table_cols)
+        Example usage:
+          To truncate the TEAMS table:
+              self.truncate_table('TEAMS', debug=True)
+        """
+        # Validate inputs
+        if not isinstance(new_table_name, str):
+            raise TypeError("new_table_name must be a string")
+        if not isinstance(old_table_name, str):
+            raise TypeError("old_table_name must be a string")
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
 
-      # Prepare the truncate query (equivalent to TRUNCATE)
-      copy_query = f"""INSERT INTO {new_table_name} ({cols_for_query})
+        old_table_info = self.fetch_records(
+            f"PRAGMA table_xinfo({old_table_name})", fetchstyle="all"
+        )
+        new_table_info = self.fetch_records(
+            f"PRAGMA table_xinfo({new_table_name})", fetchstyle="all"
+        )
+
+        old_table_cols = [row[1] for row in old_table_info]
+        new_table_cols = [row[1] for row in new_table_info]
+
+        if old_table_cols != new_table_cols:
+            raise ValueError(
+                f"The columns from {old_table_name} and {new_table_name} do not match."
+            )
+
+        cols_for_query = ", ".join(old_table_cols)
+
+        # Prepare the truncate query (equivalent to TRUNCATE)
+        copy_query = f"""INSERT INTO {new_table_name} ({cols_for_query})
                         SELECT {cols_for_query}
                         FROM {old_table_name};"""
 
-      # Debug print
-      if debug:
-          print(f"Truncate query: {copy_query}")
-          return "Run without debug to commit the changes."
+        # Debug print
+        if debug:
+            print(f"Truncate query: {copy_query}")
+            return "Run without debug to commit the changes."
 
-      # Execute and commit
-      self.execute_query(copy_query, commit=True)
-      print(f"Table '{old_table_name}' copied into '{new_table_name}' successfully.")
+        # Execute and commit
+        self.execute_query(copy_query, commit=True)
+        print(f"Table '{old_table_name}' copied into '{new_table_name}' successfully.")
 
-    def drop_table(self, table_name: str, debug: bool = False) -> None:
-      """
-      Delete a table completely from the database.
+    def drop_table(self, table_name: str, debug: bool = False) -> None | str:
+        """
+        Delete a table completely from the database.
 
-      Args:
-          table_name (str): Name of the table to delete.
-          debug (bool): If True, print debug information without executing.
+        Args:
+            table_name (str): Name of the table to delete.
+            debug (bool): If True, print debug information without executing.
 
-      Example usage:
-        To delete the TEAMS table:
-            self.drop_table('TEAMS', debug=True)
-      """
-      # Validate inputs
-      if not isinstance(table_name, str):
-          raise TypeError("table_name must be a string")
-      if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
+        Example usage:
+          To delete the TEAMS table:
+              self.drop_table('TEAMS', debug=True)
+        """
+        # Validate inputs
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string")
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
 
-      # Prepare the drop table query
-      drop_query = f"DROP TABLE IF EXISTS {table_name}"
+        # Prepare the drop table query
+        drop_query = f"DROP TABLE IF EXISTS {table_name}"
 
-      # Debug print
-      if debug:
-          print(f"Drop table query: {drop_query}")
-          return "Run without debug to commit the changes."
+        # Debug print
+        if debug:
+            print(f"Drop table query: {drop_query}")
+            return "Run without debug to commit the changes."
 
-      # Execute and commit
-      self.execute_query(drop_query, commit=True)
-      print(f"Table '{table_name}' deleted successfully.")
+        # Execute and commit
+        self.execute_query(drop_query, commit=True)
+        print(f"Table '{table_name}' deleted successfully.")
 
-    def alter_table(self, table_name: str, operation: str, column_name: str = None, new_name: str = None, 
-                    data_type: str = None, debug: bool = False) -> None:
-      """
-      Alter a table to add a column, rename a column, or rename the table.
+    def alter_table(
+        self,
+        table_name: str,
+        operation: str,
+        column_name: str | None = None,
+        new_name: str | None = None,
+        data_type: str | None = None,
+        debug: bool = False,
+    ) -> None:
+        """
+        Alter a table to add a column, rename a column, or rename the table.
 
-      Special note:
-        This func can handle timestamps if you put dtype as timestamp. Will create that
-        col with a defuault current_timestamp.
+        Special note:
+          This func can handle timestamps if you put dtype as timestamp. Will create that
+          col with a defuault current_timestamp.
 
-      Args:
-          table_name (str): Name of the table to alter.
-          operation (str): Type of alteration ('add_column', 'rename_column', 'rename_table').
-          column_name (str, optional): The name of the column to add or rename (required for column operations).
-          new_name (str, optional): The new name for a column or table (required for renaming).
-          data_type (str, optional): Data type for the new column if adding (required for 'add_column').
-          debug (bool): If True, print debug information without executing.
+        Args:
+            table_name (str): Name of the table to alter.
+            operation (str): Type of alteration ('add_column', 'rename_column', 'rename_table').
+            column_name (str, optional): The name of the column to add or rename (required for column operations).
+            new_name (str, optional): The new name for a column or table (required for renaming).
+            data_type (str, optional): Data type for the new column if adding (required for 'add_column').
+            debug (bool): If True, print debug information without executing.
 
-      Example usage:
-        To add a column to the TEAMS table:
-            self.alter_table('TEAMS', operation='add_column', column_name='CITY', data_type='TEXT', debug=True)
+        Example usage:
+          To add a column to the TEAMS table:
+              self.alter_table('TEAMS', operation='add_column', column_name='CITY', data_type='TEXT', debug=True)
 
-        To rename a column in the TEAMS table:
-            self.alter_table('TEAMS', operation='rename_column', column_name='OLD_NAME', new_name='NEW_NAME', debug=True)
+          To rename a column in the TEAMS table:
+              self.alter_table('TEAMS', operation='rename_column', column_name='OLD_NAME', new_name='NEW_NAME', debug=True)
 
-        To rename the table:
-            self.alter_table('TEAMS', operation='rename_table', new_name='NEW_TEAMS', debug=True)
-      """
-      # Validate inputs
-      if not isinstance(table_name, str):
-          raise TypeError("table_name must be a string")
-      if not isinstance(operation, str) or operation not in ['add_column', 'rename_column', 'rename_table']:
-          raise ValueError("operation must be one of 'add_column', 'rename_column', or 'rename_table'")
-      if not isinstance(debug, bool):
-          raise TypeError("debug must be a boolean")
+          To rename the table:
+              self.alter_table('TEAMS', operation='rename_table', new_name='NEW_TEAMS', debug=True)
+        """
+        # Validate inputs
+        if not isinstance(table_name, str):
+            raise TypeError("table_name must be a string")
+        if not isinstance(operation, str) or operation not in [
+            "add_column",
+            "rename_column",
+            "rename_table",
+        ]:
+            raise ValueError(
+                "operation must be one of 'add_column', 'rename_column', or 'rename_table'"
+            )
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
 
-      # Prepare the alteration query based on the operation type
-      if operation == 'add_column':
-          if not column_name or not data_type:
-            raise ValueError("For 'add_column', both 'column_name' and 'data_type' must be provided.")
-          if data_type == 'TIMESTAMP':
-            alter_query = f"ALTER TABLE {table_name} ADD COLUMN {column_name} TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-          else:
-            alter_query = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {data_type}"
+        # Prepare the alteration query based on the operation type
+        if operation == "add_column":
+            if not column_name or not data_type:
+                raise ValueError(
+                    "For 'add_column', both 'column_name' and 'data_type' must be provided."
+                )
+            if data_type == "TIMESTAMP":
+                alter_query = f"ALTER TABLE {table_name} ADD COLUMN {column_name} TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            else:
+                alter_query = (
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {data_type}"
+                )
 
-      elif operation == 'rename_column':
-          if not column_name or not new_name:
-              raise ValueError("For 'rename_column', both 'column_name' and 'new_name' must be provided.")
-          alter_query = f"ALTER TABLE {table_name} RENAME COLUMN {column_name} TO {new_name}"
+        elif operation == "rename_column":
+            if not column_name or not new_name:
+                raise ValueError(
+                    "For 'rename_column', both 'column_name' and 'new_name' must be provided."
+                )
+            alter_query = (
+                f"ALTER TABLE {table_name} RENAME COLUMN {column_name} TO {new_name}"
+            )
 
-      elif operation == 'rename_table':
-          if not new_name:
-              raise ValueError("For 'rename_table', 'new_name' must be provided.")
-          alter_query = f"ALTER TABLE {table_name} RENAME TO {new_name}"
+        elif operation == "rename_table":
+            if not new_name:
+                raise ValueError("For 'rename_table', 'new_name' must be provided.")
+            alter_query = f"ALTER TABLE {table_name} RENAME TO {new_name}"
 
-      # Debug print
-      if debug:
-          print(f"Alter table query: {alter_query}")
-          return "Run without debug to commit the changes."
+        # Debug print
+        if debug:
+            print(f"Alter table query: {alter_query}")
+            return "Run without debug to commit the changes."
 
-      # Execute and commit
-      self.execute_query(alter_query, commit=True)
-      print(f"Table '{table_name}' altered successfully with operation '{operation}'.")
-
+        # Execute and commit
+        self.execute_query(alter_query, commit=True)
+        print(
+            f"Table '{table_name}' altered successfully with operation '{operation}'."
+        )
 
     def df_to_db(self, table_name: str, df: pd.DataFrame, debug: bool = False):
         f"""
@@ -570,6 +648,5 @@ class SqliteDBManager:
             raise ValueError(f"""The table name you are using is not in the Sports Data DB.
             Here are the list of tables: {self.tables}""")
         row_tuples = [tuple(row) for row in df.itertuples(index=False, name=None)]
-    
-        self.insert_table_records(table_name, records=row_tuples, debug=debug)
 
+        self.insert_table_records(table_name, records=row_tuples, debug=debug)
