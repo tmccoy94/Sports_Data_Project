@@ -37,10 +37,10 @@ class GameOwnOddsRow:
         """
         return {
             "game_serial": self.game_serial,
-            "predicted_home_points": float(self.predicted_home_points),
-            "predicted_away_points": float(self.predicted_away_points),
             "spread": float(self.spread),
             "total": float(self.total),
+            "predicted_home_points": float(self.predicted_home_points),
+            "predicted_away_points": float(self.predicted_away_points)            
         }
 
 class OddsApiCallerMixin:
@@ -708,7 +708,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         """Calculate a weighted average."""
         return sum(stat * weight for stat, weight in zip(stats, weights))
 
-    def get_predicted_scores(self,home_serial: int = None, away_serial: int = None) -> list[float, float]:
+    def get_predicted_scores(self,home_serial: int = None, away_serial: int = None, debug: bool = False) -> list[float, float]:
         """
         Using the serials of two teams, get predicted scores for each team.
         ORDER MATTERS.
@@ -740,13 +740,22 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
         # Define stats and weights
         away_stats = [away_record.PPG_2024, home_record.OPPG_2024, away_record.PPG_AWAY,
                     home_record.OPPG_HOME, away_record.PPG_LAST_3, home_record.OPPG_LAST_3]
+        
         home_stats = [home_record.PPG_2024, away_record.OPPG_2024, home_record.PPG_HOME,
                     away_record.OPPG_AWAY, home_record.PPG_LAST_3, away_record.OPPG_LAST_3]
+        
         weights = [0.1, 0.1, 0.2, 0.2, 0.2, 0.2]
 
+        
         # Calculate weighted averages
         away_team_score_prediction = round(self.get_weighted_average(away_stats, weights),2)
         home_team_score_prediction = round(self.get_weighted_average(home_stats, weights),2)
+
+        if debug:
+            print(f"away stats: {away_stats}")
+            print(f"home stats: {home_stats}")
+            print(f"home team score prediciton: {home_team_score_prediction}")
+            print(f"away team score prediciton: {away_team_score_prediction}")
 
         return [home_team_score_prediction, away_team_score_prediction]
         
