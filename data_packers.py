@@ -161,26 +161,24 @@ class TeamRankingsScraperMixin:
         """
         This grabs the names that teamranks uses in their tables that we scrape with this object
         then matches them with the team serials that exist in the Sports Data database so that
-        they can be sent into the STATS tables that the TEAMS table is connected to.
-
-        
+        they can be sent into the STATS tables that the TEAMS table is connected to.        
         """
         return {x:y for x,y in zip(self.teams_df['TR_TABLE_NAME'], self.teams_df['SERIAL'])}
     
     def _build_tr_url_ref_dict(self) -> dict[str, str]:
         """
         This uses the teamranks URL column in the teams table so that you can scrape the data for
-        each team from the database. For use in the team scrape functionality.
-
-        
+        each team from the database. For use in the team scrape functionality.        
         """
         return {team_name: url_name for team_name, url_name in zip(self.teams_df['TEAM_NAME'], 
                                                                    self.teams_df['TR_URL_NAME'])}
     
     def _build_opponent_map(self) -> dict[str, str]:
-        """Returns:
+        """
+        Returns:
          A dict used to map the names of opponents on team schedule to names that will
-        match what the names are in the Sports DB."""
+        match what the names are in the Sports DB.
+        """
         return {team_tr_name: url_name for team_tr_name, url_name in zip(self.teams_df['TR_TABLE_NAME'], 
                                                                          self.teams_df['TEAM_NAME'])}
     
@@ -234,23 +232,27 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         self.team_serial_ref_dict: dict[str, str] = self._build_team_serial_ref() # League specified in subclasses
 
     def _query_last_db_updated_date(self) -> str:
-        """Get date the sports db was last updated.
+        """
+        Get date the sports db was last updated.
 
         You can only call this function in a subclass to Sports_Odds_DB_Packer that has defined what league it is using.
 
         Returns:
-          date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S"""
+          date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S
+        """
         db_last_updated_date: str = self.db_manager.fetch_records(f"""SELECT MAX(LAST_UPDATED_DATE) FROM DB_UPDATE_RECORDS
                                           WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')[0][0]
         return db_last_updated_date 
     
     def _query_most_recent_game_date(self) -> str:
-        """Get date the sports db contains for a game.
+        """
+        Get date the sports db contains for a game.
 
         You can only call this function in a subclass to Sports_Odds_DB_Packer that has defined what league it is using.
 
         Returns:
-          date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S"""
+          date (str): The last date the db was updated in %Y-%m-%d %H:%M:%S
+          """
         most_recent_game_date = self.db_manager.fetch_records(f"""SELECT MAX(GAME_DATE) FROM GAMES
                                                WHERE LEAGUE_SERIAL = {self.league_serial}""",fetchstyle='one')[0][0]
         return most_recent_game_date
@@ -294,7 +296,8 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         self.db_manager.insert_table_records("DB_UPDATE_RECORDS", [(now,self.league_serial)])
 
     def is_new_week(self) -> bool:
-        """Use datetime to check if the db_last_updated date is in the past week.
+        """
+        Use datetime to check if the db_last_updated date is in the past week.
         
         Returns:
             bool: True if the most recent Sunday has passed since the last_updated_date, 
@@ -399,9 +402,10 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
 
     def get_uid(self, df: pd.DataFrame, home_serial_col_name:str, away_serial_col_name:str, 
                 date_col_name: str, debug: bool = False) -> pd.DataFrame:
-        """Takes in a df along with the col names needed in order to form a new df that
-        only uses the day of the date (formatted %Y:%m:%d %H:%M:%S) to create a join between the dfs instead of
-        the full date time that is stored in this database.
+        """
+        Takes in a df along with the col names needed in order to form a new df that
+        only uses the day of the date (formatted %Y:%m:%d %H:%M:%S) to create a join between the 
+        dfs instead of the full date time that is stored in this database.
 
         It will combine the home team serial, away team serial, and day of the game into one string creating
         a unique id for each game.
@@ -417,7 +421,8 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
           debug (bool): A boolean you can set to true to help debug the function
           
         Returns:
-          df (pd.DataFrame): Same df you put in PLUS three cols: day, time, and UID."""
+          df (pd.DataFrame): Same df you put in PLUS three cols: day, time, and UID.
+        """
         
         if df.empty:
             raise ValueError ("Provided df is empty. Need values for this work")
@@ -450,8 +455,10 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         return df
 
     def _combine_odds_api_and_games_dfs(self) -> pd.DataFrame:
-        """Check that the correct columns are grabbed and combine the games table and odds df
-        info so that they are ready to go into the market odds table."""
+        """
+        Check that the correct columns are grabbed and combine the games table and odds df
+        info so that they are ready to go into the market odds table.
+        """
 
         if not getattr(self, 'odds_called', True):
             try:
@@ -531,8 +538,10 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
         return new_entries
 
     def refresh_market_odds_table(self, debug: bool = False) -> None:
-        """Get the existing data and compare it to the newly pulled api market odds data.
-        Then insert any data that has changed on the new odds api pull."""
+        """
+        Get the existing data and compare it to the newly pulled api market odds data.
+        Then insert any data that has changed on the new odds api pull.
+        """
         # Need to have called the odds api for this to work
         if getattr(self, 'odds_called', False):
             try:
@@ -564,8 +573,10 @@ class Sports_Odds_DB_Packer(OddsApiCallerMixin, TeamRankingsScraperMixin):
                     raise RuntimeError(f"Failed to insert records for market odds tabel refresh function:\n {e}")
 
     def pack_odds_table(self, debug: bool = False) -> None:
-        """Compare the most recently added game odds to what is in the api data, then
-        add the data to the game_market_odds table."""
+        """
+        Compare the most recently added game odds to what is in the api data, then
+        add the data to the game_market_odds table.
+        """
         
         # Get the most recent game date from DB
         most_recent_game_date_has_odds: list[tuple] = self.db_manager.fetch_records("""
@@ -618,7 +629,7 @@ class NFL_Data_Packer(Sports_Odds_DB_Packer):
     odds, it has to do with the odds api.
     """
 
-    def __init__(self, db_name: str, league_name: str = 'NFL', debug = False):
+    def __init__(self, db_name: str, league_name: str = 'NFL', debug: bool = False):
         """
         Here we query the Sports DB for the league that is chosen in the data packer,
         get the odds info from the inhereted 
