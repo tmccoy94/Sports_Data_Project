@@ -1,0 +1,13 @@
+{
+    "python.analysis.typeCheckingMode": "off",
+    "window.zoomLevel": 1,
+    "notebook.formatOnSave.enabled": true,
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python.exe",
+    "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+    "workbench.colorCustomizations": {
+    "notebook.cellBorderColor": "#ff0000", // Change cell border color
+}
+}
